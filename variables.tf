@@ -45,6 +45,16 @@ variable "nameservers" {
   type        = list(string)
 }
 
+variable "talos_boot_from_iso" {
+  type    = bool
+  default = false
+}
+
+variable "talos_schematic_id" {
+  description = "Talos Image Factory schematic ID"
+  type        = string
+}
+
 variable "nodes" {
   description = "Talos cluster nodes"
 

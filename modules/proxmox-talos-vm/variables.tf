@@ -14,14 +14,19 @@ variable "talos_iso" {
   type = string
 }
 
+variable "boot_from_iso" {
+  type    = bool
+  default = false
+}
+
 variable "nodes" {
   type = map(object({
-    vm_id  = number
-    name   = string
-    ip     = string
-    cidr   = optional(number, 24)
-    mac    = string
-    role   = string
+    vm_id = number
+    name  = string
+    ip    = string
+    cidr  = optional(number, 24)
+    mac   = string
+    role  = string
 
     cores  = optional(number, 4)
     memory = optional(number, 4096)

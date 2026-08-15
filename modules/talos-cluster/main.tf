@@ -45,7 +45,7 @@ data "talos_machine_configuration" "node" {
   cluster_name     = var.cluster_name
   cluster_endpoint = local.cluster_endpoint
 
-  machine_type = each.value.role == "controlplane"  ? "controlplane"  : "worker"
+  machine_type = each.value.role == "controlplane" ? "controlplane" : "worker"
 
   machine_secrets = talos_machine_secrets.this.machine_secrets
 
@@ -54,8 +54,13 @@ data "talos_machine_configuration" "node" {
   config_patches = [
     yamlencode({
       machine = {
+        install = {
+          disk = "/dev/sda"
+
+          image = "factory.talos.dev/metal-installer/${var.talos_schematic_id}:${var.talos_version}"
+        }
         network = {
-          hostname = each.value.name
+#          hostname = each.value.name
 
           interfaces = [
             {

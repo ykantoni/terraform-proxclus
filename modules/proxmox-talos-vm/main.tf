@@ -1,10 +1,10 @@
 resource "proxmox_virtual_environment_vm" "talos" {
   for_each = var.nodes
 
-  name        = each.value.name
-  vm_id       = each.value.vm_id
-  node_name   = var.proxmox_node
-  description = "Talos ${each.value.role} managed by Terraform"
+  name            = each.value.name
+  vm_id           = each.value.vm_id
+  node_name       = var.proxmox_node
+  description     = "Talos ${each.value.role} managed by Terraform"
   stop_on_destroy = true
   tags = [
     "terraform",
@@ -55,7 +55,10 @@ resource "proxmox_virtual_environment_vm" "talos" {
     file_format       = "qcow2"
   }
 
+  boot_order = var.boot_from_iso ? ["ide3", "scsi0"] : ["scsi0", "ide3"]
+
   cdrom {
+    #    file_id   = var.boot_from_iso ? var.talos_iso : "none"
     file_id = var.talos_iso
   }
 

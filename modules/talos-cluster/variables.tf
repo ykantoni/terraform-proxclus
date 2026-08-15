@@ -14,6 +14,11 @@ variable "nameservers" {
   type = list(string)
 }
 
+variable "talos_schematic_id" {
+  description = "Talos Image Factory schematic ID"
+  type        = string
+}
+
 variable "nodes" {
   type = map(object({
     vm_id = number
