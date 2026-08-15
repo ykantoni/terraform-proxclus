@@ -20,7 +20,7 @@ nodes = {
   cp1 = {
     vm_id = 9001
     name  = "cp1"
-    ip    = "192.168.1.101"
+    ip    = "192.168.1.106"
     mac   = "BC:24:11:00:01:01"
     role  = "controlplane"
 
@@ -32,7 +32,7 @@ nodes = {
   worker1 = {
     vm_id = 9002
     name  = "w1"
-    ip    = "192.168.1.102"
+    ip    = "192.168.1.109"
     mac   = "BC:24:11:00:01:02"
     role  = "worker"
   }
@@ -40,7 +40,7 @@ nodes = {
   worker2 = {
     vm_id = 9003
     name  = "w2"
-    ip    = "192.168.1.103"
+    ip    = "192.168.1.110"
     mac   = "BC:24:11:00:01:03"
     role  = "worker"
   }
@@ -48,7 +48,7 @@ nodes = {
   worker3 = {
     vm_id = 9004
     name  = "w3"
-    ip    = "192.168.1.104"
+    ip    = "192.168.1.112"
     mac   = "BC:24:11:00:01:04"
     role  = "worker"
   }

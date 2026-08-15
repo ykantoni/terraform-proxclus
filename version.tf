@@ -14,5 +14,5 @@ terraform {
 
   backend "local" {
     path = "/root/terraform/state/terraform.tfstate"
-  }  
+  }
 }
