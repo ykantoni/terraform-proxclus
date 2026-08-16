@@ -13,6 +13,6 @@ terraform {
   }
 
   backend "local" {
-    path = "/root/terraform/state/terraform.tfstate"
+    path = "/home/yurick/terraform/state/terraform.tfstate"
   }
 }

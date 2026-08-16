@@ -60,7 +60,6 @@ data "talos_machine_configuration" "node" {
           image = "factory.talos.dev/metal-installer/${var.talos_schematic_id}:${var.talos_version}"
         }
         network = {
-#          hostname = each.value.name
 
           interfaces = [
             {
@@ -95,6 +94,7 @@ resource "talos_machine_configuration_apply" "node" {
 
   machine_configuration_input = data.talos_machine_configuration.node[each.key].machine_configuration
 }
+
 resource "talos_machine_bootstrap" "this" {
   depends_on = [
     talos_machine_configuration_apply.node

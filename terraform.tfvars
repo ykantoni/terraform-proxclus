@@ -20,38 +20,46 @@ nameservers = [
 
 nodes = {
   cp1 = {
-    vm_id = 9001
-    name  = "cp1"
-    ip    = "192.168.1.201"
-    mac   = "BC:24:11:00:01:01"
-    role  = "controlplane"
-
-    cores  = 4
+    vm_id  = 9001
+    name   = "cp1"
+    ip     = "192.168.1.201"
+    mac    = "BC:24:11:00:01:01"
+    role   = "controlplane"
+    cores  = 2
     memory = 4096
     disk   = 32
   }
 
   worker1 = {
-    vm_id = 9002
-    name  = "w1"
-    ip    = "192.168.1.202"
-    mac   = "BC:24:11:00:01:02"
-    role  = "worker"
+    vm_id  = 9002
+    name   = "w1"
+    ip     = "192.168.1.202"
+    mac    = "BC:24:11:00:01:02"
+    role   = "worker"
+    cores  = 4
+    memory = 8192
+    disk   = 32
   }
 
   worker2 = {
-    vm_id = 9003
-    name  = "w2"
-    ip    = "192.168.1.203"
-    mac   = "BC:24:11:00:01:03"
-    role  = "worker"
+    vm_id  = 9003
+    name   = "w2"
+    ip     = "192.168.1.203"
+    mac    = "BC:24:11:00:01:03"
+    role   = "worker"
+    cores  = 4
+    memory = 8192
+    disk   = 32
   }
 
   worker3 = {
-    vm_id = 9004
-    name  = "w3"
-    ip    = "192.168.1.204"
-    mac   = "BC:24:11:00:01:04"
-    role  = "worker"
+    vm_id  = 9004
+    name   = "w3"
+    ip     = "192.168.1.204"
+    mac    = "BC:24:11:00:01:04"
+    role   = "worker"
+    cores  = 4
+    memory = 8192
+    disk   = 32
   }
 }
