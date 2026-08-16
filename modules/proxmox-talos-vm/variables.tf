@@ -16,12 +16,12 @@ variable "talos_iso" {
 
 variable "nodes" {
   type = map(object({
-    vm_id  = number
-    name   = string
-    ip     = string
-    cidr   = optional(number, 24)
-    mac    = string
-    role   = string
+    vm_id = number
+    name  = string
+    ip    = string
+    cidr  = optional(number, 24)
+    mac   = string
+    role  = string
 
     cores  = optional(number, 4)
     memory = optional(number, 4096)
