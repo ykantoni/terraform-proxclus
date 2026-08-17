@@ -4,6 +4,12 @@ apply:
 destroy:
 	terraform destroy -auto-approve
 
+t-create:
+	/usr/bin/bash -c "pushd vm-templates && sudo ./nvidia-qemu-iscsi-2c.sh && popd"
+
+t-destroy:
+	sudo /usr/sbin/qm destroy 9000
+
 generate:
 	terraform output -raw talosconfig > $(HOME)/talosconfig
 	mkdir -p $(HOME)/.kube

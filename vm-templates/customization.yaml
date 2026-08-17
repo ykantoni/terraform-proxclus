@@ -1,4 +1,8 @@
 customization:
+    extraKernelArgs:
+        - -console
+        - console=tty0
+        - console=ttyS0
     systemExtensions:
         officialExtensions:
             - siderolabs/iscsi-tools
