@@ -93,6 +93,9 @@ resource "talos_machine_configuration_apply" "node" {
   client_configuration = talos_machine_secrets.this.client_configuration
 
   machine_configuration_input = data.talos_machine_configuration.node[each.key].machine_configuration
+  config_patches = concat(
+    try(each.value.pcigpu, null) != null ? [file("${path.module}/patches/nvidia-modules.patch.yaml")] : []
+  )
 }
 
 resource "talos_machine_bootstrap" "this" {

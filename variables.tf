@@ -59,13 +59,14 @@ variable "nodes" {
   description = "Talos cluster nodes"
 
   type = map(object({
-    vm_id = number
-    name  = string
-    ip    = string
-    cidr  = optional(number, 24)
-    mac   = string
-    role  = string
+    vm_id  = number
+    name   = string
+    ip     = string
+    cidr   = optional(number, 24)
+    mac    = string
+    role   = string
 
+    pcigpu = optional(string, null)
     cores  = optional(number, 4)
     memory = optional(number, 4096)
     disk   = optional(number, 32)

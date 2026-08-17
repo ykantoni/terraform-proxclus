@@ -21,11 +21,12 @@ variable "talos_schematic_id" {
 
 variable "nodes" {
   type = map(object({
-    vm_id = number
-    name  = string
-    ip    = string
-    cidr  = number
-    mac   = string
-    role  = string
+    vm_id  = number
+    name   = string
+    ip     = string
+    cidr   = number
+    mac    = string
+    role   = string
+    pcigpu = string
   }))
 }

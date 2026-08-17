@@ -6,11 +6,12 @@ output "nodes" {
     key => {
       vm_id = proxmox_virtual_environment_vm.talos[key].vm_id
 
-      name = node.name
-      ip   = node.ip
-      cidr = node.cidr
-      mac  = node.mac
-      role = node.role
+      name   = node.name
+      ip     = node.ip
+      cidr   = node.cidr
+      mac    = node.mac
+      role   = node.role
+      pcigpu = node.pcigpu
     }
   }
 }

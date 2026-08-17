@@ -26,7 +26,7 @@ nodes = {
     mac    = "BC:24:11:00:01:01"
     role   = "controlplane"
     cores  = 2
-    memory = 4096
+    memory = 6144
     disk   = 32
   }
 
@@ -39,6 +39,7 @@ nodes = {
     cores  = 4
     memory = 8192
     disk   = 32
+    pcigpu = "RTX5060Ti"
   }
 
   worker2 = {

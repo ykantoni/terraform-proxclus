@@ -31,5 +31,6 @@ variable "nodes" {
     cores  = optional(number, 4)
     memory = optional(number, 4096)
     disk   = optional(number, 32)
+    pcigpu = optional(string, null)
   }))
 }

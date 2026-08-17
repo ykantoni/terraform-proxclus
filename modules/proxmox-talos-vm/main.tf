@@ -44,6 +44,16 @@ resource "proxmox_virtual_environment_vm" "talos" {
     mac_address = each.value.mac
   }
 
+  dynamic "hostpci" {
+    for_each = try(each.value.pcigpu, null) != null ? [each.value.pcigpu] : []
+
+    content {
+      device  = "hostpci0"
+      mapping = hostpci.value
+      pcie    = true
+    }
+  }
+
   agent {
     enabled = true
   }
