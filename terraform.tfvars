@@ -37,7 +37,7 @@ nodes = {
     mac    = "BC:24:11:00:01:02"
     role   = "worker"
     cores  = 4
-    memory = 8192
+    memory = 12284
     disk   = 32
     pcigpu = "RTX5060Ti"
   }

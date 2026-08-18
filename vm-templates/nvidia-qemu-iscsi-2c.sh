@@ -19,9 +19,11 @@ sudo /usr/sbin/qm importdisk 9000 /tmp/nocloud-amd64.raw sdc-storage
 
 sudo /usr/sbin/qm set 9000   --scsihw virtio-scsi-pci   --scsi0 sdc-storage:9000/vm-9000-disk-1.raw
 
+sudo /usr/sbin/qm resize 9000 scsi0 32G
+
 sudo /usr/sbin/qm set 9000 --boot order=scsi0
 sudo /usr/sbin/qm set 9000 --serial0 socket
-sudo /usr/sbin/qm set 9000 --vga serial0
+sudo /usr/sbin/qm set 9000 --vga std
 sudo /usr/sbin/qm set 9000 --agent enabled=1
 
 sudo /usr/sbin/qm template 9000
