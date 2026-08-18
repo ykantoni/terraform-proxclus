@@ -19,6 +19,11 @@ variable "talos_schematic_id" {
   type        = string
 }
 
+variable "controlplane_vip" {
+  type    = string
+  default = "192.168.1.99"
+}
+
 variable "nodes" {
   type = map(object({
     vm_id  = number

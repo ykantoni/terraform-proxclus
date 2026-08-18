@@ -8,7 +8,6 @@ module "proxmox_talos_vms" {
   talos_iso     = var.talos_iso
   boot_from_iso = var.talos_boot_from_iso
 
-
   nodes = var.nodes
 }
 module "talos_cluster" {
@@ -19,6 +18,7 @@ module "talos_cluster" {
   talos_schematic_id = var.talos_schematic_id
   gateway            = var.gateway
   nameservers        = var.nameservers
+  controlplane_vip   = var.controlplane_vip
 
   nodes = module.proxmox_talos_vms.nodes
 }

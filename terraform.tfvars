@@ -8,8 +8,9 @@ talos_iso           = "local:iso/nocloud-amd64.iso"
 talos_boot_from_iso = true
 talos_schematic_id  = "042ebed3c8675b0647bcc3854cfbb54acdf815c900d5bb463e04d7f93c1845fa"
 
-cluster_name  = "proxclus"
-talos_version = "v1.13.8"
+cluster_name     = "proxclus"
+talos_version    = "v1.13.8"
+controlplane_vip = "192.168.1.99"
 
 gateway = "192.168.1.1"
 

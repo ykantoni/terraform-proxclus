@@ -10,6 +10,9 @@ t-create:
 t-destroy:
 	sudo /usr/sbin/qm destroy 9000
 
+fmt:
+	terraform fmt -recursive
+
 generate:
 	terraform output -raw talosconfig > $(HOME)/talosconfig
 	mkdir -p $(HOME)/.kube

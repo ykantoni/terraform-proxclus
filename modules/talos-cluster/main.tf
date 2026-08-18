@@ -18,7 +18,7 @@ locals {
 
   bootstrap_node = values(local.controlplanes)[0]
 
-  cluster_endpoint = "https://${local.bootstrap_node.ip}:6443"
+  cluster_endpoint = "https://${var.controlplane_vip}:6443"
 }
 
 resource "talos_machine_secrets" "this" {
@@ -51,38 +51,48 @@ data "talos_machine_configuration" "node" {
 
   talos_version = var.talos_version
 
-  config_patches = [
-    yamlencode({
-      machine = {
-        install = {
-          disk = "/dev/sda"
+  config_patches = concat(
+    [
+      yamlencode({
+        machine = {
+          install = {
+            disk = "/dev/sda"
 
-          image = "factory.talos.dev/metal-installer/${var.talos_schematic_id}:${var.talos_version}"
+            image = "factory.talos.dev/metal-installer/${var.talos_schematic_id}:${var.talos_version}"
+          }
+          network = {
+
+            interfaces = [
+              {
+                interface = "eth0"
+
+                addresses = [
+                  "${each.value.ip}/${each.value.cidr}"
+                ]
+
+                routes = [
+                  {
+                    network = "0.0.0.0/0"
+                    gateway = var.gateway
+                  }
+                ]
+              }
+            ]
+
+            nameservers = var.nameservers
+          }
         }
-        network = {
-
-          interfaces = [
-            {
-              interface = "eth0"
-
-              addresses = [
-                "${each.value.ip}/${each.value.cidr}"
-              ]
-
-              routes = [
-                {
-                  network = "0.0.0.0/0"
-                  gateway = var.gateway
-                }
-              ]
-            }
-          ]
-
-          nameservers = var.nameservers
-        }
-      }
-    })
-  ]
+      })
+    ],
+    each.value.role == "controlplane" ? [
+      yamlencode({
+        apiVersion = "v1alpha1"
+        kind       = "Layer2VIPConfig"
+        name       = var.controlplane_vip
+        link       = "eth0"
+      })
+    ] : []
+  )
 }
 resource "talos_machine_configuration_apply" "node" {
   for_each = var.nodes
