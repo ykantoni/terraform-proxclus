@@ -15,14 +15,21 @@ module "talos_cluster" {
 
   cluster_name       = var.cluster_name
   talos_version      = var.talos_version
-  talos_schematic_id = var.talos_schematic_id
+  talos_schematic_id = talos_image_factory_schematic.this.id
   gateway            = var.gateway
   nameservers        = var.nameservers
   controlplane_vip   = var.controlplane_vip
+  cni                = var.cni
+  kube_prism_port    = var.kube_prism_port
+  wait_for_health    = var.wait_for_health
 
   nodes = module.proxmox_talos_vms.nodes
 }
 
+resource "local_sensitive_file" "kubeconfig" {
+  filename = "${path.root}/.kube/config"
+  content  = module.talos_cluster.kubeconfig
 
-
-
+  file_permission      = "0600"
+  directory_permission = "0700"
+}

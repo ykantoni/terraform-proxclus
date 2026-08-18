@@ -19,3 +19,15 @@ output "talosconfig" {
   sensitive = true
   value     = module.talos_cluster.talosconfig
 }
+
+output "kubeconfig_path" {
+  value = local_sensitive_file.kubeconfig.filename
+}
+
+output "load_balancer_ip_range" {
+  value = one(module.cilium[*].load_balancer_ip_range)
+}
+
+output "talos_schematic_id" {
+  value = talos_image_factory_schematic.this.id
+}

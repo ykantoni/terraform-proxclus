@@ -50,14 +50,56 @@ variable "talos_boot_from_iso" {
   default = false
 }
 
-variable "talos_schematic_id" {
-  description = "Talos Image Factory schematic ID"
-  type        = string
-}
-
 variable "controlplane_vip" {
   type    = string
   default = "192.168.1.99"
+}
+
+variable "cni" {
+  description = "Cluster CNI. cilium keeps Talos from deploying Flannel and kube-proxy and installs Cilium in their place."
+  type        = string
+  default     = "cilium"
+
+  validation {
+    condition     = contains(["flannel", "cilium"], var.cni)
+    error_message = "cni must be either flannel or cilium."
+  }
+}
+
+variable "cilium_version" {
+  description = "Cilium Helm chart version"
+  type        = string
+  default     = "1.19.6"
+}
+
+variable "kube_prism_port" {
+  description = "Port the per-node KubePrism API server proxy listens on"
+  type        = number
+  default     = 7445
+}
+
+variable "wait_for_health" {
+  description = "Health check the cluster before installing addons. Turn off to plan against a cluster that is down."
+  type        = bool
+  default     = true
+}
+
+variable "load_balancer_ip_range" {
+  description = "Inclusive address range Cilium hands to LoadBalancer services. Must be free on the node subnet."
+
+  type = object({
+    start = string
+    stop  = string
+  })
+
+  validation {
+    condition = alltrue([
+      can(cidrhost("${var.load_balancer_ip_range.start}/32", 0)),
+      can(cidrhost("${var.load_balancer_ip_range.stop}/32", 0)),
+    ])
+
+    error_message = "load_balancer_ip_range start and stop must both be IPv4 addresses."
+  }
 }
 
 variable "nodes" {

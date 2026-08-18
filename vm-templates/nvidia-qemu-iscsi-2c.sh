@@ -1,6 +1,14 @@
-/usr/bin/curl -X POST -s  --data-binary @customization.yaml   https://factory.talos.dev/schematics | jq .
+set -euo pipefail
 
-/usr/bin/wget -O /tmp/nocloud-amd64.raw.xz https://factory.talos.dev/image/7e800890378b7f11847cc407e61c6559027d9d569e7e67df3643ef018e10c523/v1.13.8/nocloud-amd64.raw.xz
+TALOS_VERSION=v1.13.8
+
+# Same customization.yaml Terraform derives the installer schematic from, so the
+# template image and the machine configuration can never reference different
+# extension sets.
+SCHEMATIC_ID=$(/usr/bin/curl -X POST -sf --data-binary @../customization.yaml https://factory.talos.dev/schematics | jq -r .id)
+echo "schematic: ${SCHEMATIC_ID}"
+
+/usr/bin/wget -O /tmp/nocloud-amd64.raw.xz "https://factory.talos.dev/image/${SCHEMATIC_ID}/${TALOS_VERSION}/nocloud-amd64.raw.xz"
 
 /usr/bin/bash -c "pushd /tmp && /usr/bin/xz -d -k /tmp/nocloud-amd64.raw.xz && popd"
 

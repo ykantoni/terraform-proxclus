@@ -10,6 +10,16 @@ terraform {
     talos = {
       source = "siderolabs/talos"
     }
+
+    helm = {
+      source  = "hashicorp/helm"
+      version = "~> 3.1"
+    }
+
+    local = {
+      source  = "hashicorp/local"
+      version = "~> 2.5"
+    }
   }
 
   backend "local" {
