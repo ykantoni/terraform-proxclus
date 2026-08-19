@@ -2,6 +2,8 @@ apply:
 	terraform apply -auto-approve
 
 destroy:
+	kubectl -n longhorn-system patch settings.longhorn.io deleting-confirmation-flag \
+      --type=merge -p '{"value":"true"}'
 	terraform destroy -auto-approve
 
 t-create:

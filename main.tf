@@ -22,6 +22,11 @@ module "talos_cluster" {
   cni                = var.cni
   kube_prism_port    = var.kube_prism_port
   wait_for_health    = var.wait_for_health
+  wait_for_api       = var.wait_for_api
+
+  config_patches = var.enable_longhorn ? [
+    file("${path.module}/modules/addons/longhorn/patches/longhorn-mounts.patch.yaml")
+  ] : []
 
   nodes = module.proxmox_talos_vms.nodes
 }

@@ -14,6 +14,8 @@ controlplane_vip = "192.168.1.99"
 cni            = "cilium"
 cilium_version = "1.19.6"
 
+enable_longhorn = true
+
 # Off because cp1, worker2 and worker3 never reach Talos stage "running": the
 # NVIDIA extensions in the shared image wait forever for a GPU those nodes do
 # not have, so the "all nodes to finish boot sequence" check can never pass.

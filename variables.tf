@@ -84,6 +84,30 @@ variable "wait_for_health" {
   default     = true
 }
 
+variable "wait_for_api" {
+  description = "Poll the Kubernetes API at controlplane_vip until it answers before installing addons. Narrower than wait_for_health: it only proves the API server is reachable, so it stays useful even when wait_for_health is off."
+  type        = bool
+  default     = true
+}
+
+variable "enable_longhorn" {
+  description = "Install Longhorn as the cluster's default CSI provider for dynamic PV provisioning. Also adds the /var/lib/longhorn kubelet mount to every node's machine configuration; turning this on reboots every node."
+  type        = bool
+  default     = false
+}
+
+variable "longhorn_version" {
+  description = "Longhorn Helm chart version"
+  type        = string
+  default     = "1.8.1"
+}
+
+variable "longhorn_replica_count" {
+  description = "Default number of replicas Longhorn keeps for each volume"
+  type        = number
+  default     = 3
+}
+
 variable "load_balancer_ip_range" {
   description = "Inclusive address range Cilium hands to LoadBalancer services. Must be free on the node subnet."
 

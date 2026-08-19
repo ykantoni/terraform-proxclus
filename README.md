@@ -7,6 +7,7 @@ Talos Linux Kubernetes cluster on Proxmox VE.
 - `modules/proxmox-talos-vm` — Proxmox VMs
 - `modules/talos-cluster` — Talos machine configuration and cluster bootstrap
 - `modules/addons/cilium` — Cilium and its LoadBalancer address pool
+- `modules/addons/longhorn` — Longhorn, the default CSI provider for dynamic PVs
 - `addons.tf` — where addons are composed
 - `schematic.tf` — Talos image schematic, derived from `customization.yaml`
 
@@ -16,9 +17,9 @@ One module per addon under `modules/addons/`, instantiated in `addons.tf` with
 its own enable flag. An addon owns everything it needs: its Helm release, its
 namespace, any nested charts for custom resources, and its Talos patches.
 
-Most addons are more than a Helm chart. Longhorn, for example, needs
-`iscsi-tools` and `util-linux-tools` in the image schematic, a
-`/var/lib/longhorn` kubelet mount in the machine configuration, a
+Most addons are more than a Helm chart. `modules/addons/longhorn` is the
+example: it needs `iscsi-tools` and `util-linux-tools` in the image schematic,
+a `/var/lib/longhorn` kubelet mount in the machine configuration, a
 `longhorn-system` namespace labelled `pod-security.kubernetes.io/enforce=privileged`,
 and only then the chart. The machine-config half goes in
 `modules/addons/<name>/patches/` and is passed to `module.talos_cluster` through
@@ -67,11 +68,39 @@ node subnet: outside any DHCP scope, clear of the node addresses and of
 | Control-plane VIP        | 192.168.1.99                  |
 | LoadBalancer pool        | 192.168.1.60-192.168.1.98     |
 
+## Storage
+
+`enable_longhorn = true` installs Longhorn and makes its `longhorn`
+StorageClass the cluster default, so PVCs provision dynamically without naming
+`storageClassName`. It also adds a `/var/lib/longhorn` kubelet mount to every
+node's machine configuration — turning it on for the first time reboots the
+whole cluster, so it defaults to `false`. `iscsi-tools` and `util-linux-tools`,
+which Longhorn's engine needs on the host, are already in
+`customization.yaml` regardless of this flag.
+
+`longhorn_version` and `longhorn_replica_count` (default 3, matching the
+worker count) tune the release; see `modules/addons/longhorn/README.md` for
+what else the module sets and why.
+
 ## Ordering
 
-Bootstrapping only means Talos accepted the call, so `data.talos_cluster_health`
-gates the addons on the cluster actually being up. Cilium is installed only
-after it passes.
+Bootstrapping only means Talos accepted the call, so the addons need
+something else to gate on before the cluster is actually reachable. This
+cluster uses two independent gates, both in `modules/talos-cluster`:
+
+- `data.talos_cluster_health` (`wait_for_health`) — thorough, but currently
+  off; see "Known issue" below.
+- `terraform_data.wait_for_api` (`wait_for_api`, on by default) — polls
+  `https://<controlplane_vip>:6443/version` until it gets any HTTP response
+  (a 401 counts — this cluster has anonymous auth disabled, so every endpoint
+  answers 401 once up), which is all Helm-based addons actually need. It runs
+  once per cluster lifetime (a fresh build after `terraform destroy`
+  re-triggers it) and needs `curl` on the machine running `terraform apply`.
+
+Cilium and Longhorn both depend on `module.talos_cluster` as a whole, which is
+enough: a module-level `depends_on` waits on every resource inside that
+module, `terraform_data.wait_for_api` included, with no extra wiring needed
+in `addons.tf`.
 
 The Kubernetes-level checks stay enabled deliberately, because they are the only
 ones that prove the API server answers requests. Talos skips the two that cannot

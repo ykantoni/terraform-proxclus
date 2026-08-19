@@ -65,6 +65,24 @@ variable "wait_for_health" {
   default     = true
 }
 
+variable "wait_for_api" {
+  description = "Poll the Kubernetes API at controlplane_vip until it answers before dependents run. Narrower than wait_for_health: it only proves the API server is reachable, not that every node finished Talos's own boot sequence, so it stays useful even when wait_for_health is off. See README's Known issue section for why wait_for_health is off on this cluster."
+  type        = bool
+  default     = true
+}
+
+variable "api_wait_timeout" {
+  description = "Seconds to poll the API before giving up, when wait_for_api is on"
+  type        = number
+  default     = 180
+}
+
+variable "api_wait_interval" {
+  description = "Seconds between polls, when wait_for_api is on"
+  type        = number
+  default     = 5
+}
+
 variable "nodes" {
   type = map(object({
     vm_id  = number

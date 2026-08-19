@@ -146,6 +146,46 @@ resource "talos_machine_bootstrap" "this" {
 
   client_configuration = talos_machine_secrets.this.client_configuration
 }
+# A narrower, faster gate than data.talos_cluster_health: it only proves the
+# API server answers, which is all Helm-based addons actually need. Unlike
+# the health check, it does not look at Talos boot stage, so it stays usable
+# even when wait_for_health is off to work around the NVIDIA-extension boot
+# stage bug (see README's Known issue section). Deliberately does not use
+# curl -f: this cluster's API server has anonymous auth disabled, so every
+# endpoint — /version included — answers 401 even once fully up, and -f would
+# treat that as failure. Any HTTP response at all, even a 401, proves the API
+# server is listening and evaluating requests; only a connection-level
+# failure (nothing listening yet) should count as "not ready". No
+# authentication needed for the probe itself, so this needs no kubeconfig,
+# and can run as soon as bootstrap has been requested.
+#
+# Provisioners only run once, at creation, so this polls exactly once per
+# cluster lifetime: a fresh `apply` after `destroy` empties state and recreates
+# it, but an already-satisfied wait is not repeated by routine incremental
+# applies against a cluster that is already up.
+resource "terraform_data" "wait_for_api" {
+  count = var.wait_for_api ? 1 : 0
+
+  depends_on = [
+    talos_machine_configuration_apply.node,
+    talos_machine_bootstrap.this,
+  ]
+
+  provisioner "local-exec" {
+    command = <<-EOT
+      set -eu
+      end=$(( $(date +%s) + ${var.api_wait_timeout} ))
+      until curl -sSk --max-time 5 "https://${var.controlplane_vip}:6443/version" >/dev/null 2>&1; do
+        if [ "$(date +%s)" -ge "$end" ]; then
+          echo "Kubernetes API at ${var.controlplane_vip}:6443 did not answer within ${var.api_wait_timeout}s" >&2
+          exit 1
+        fi
+        sleep ${var.api_wait_interval}
+      done
+    EOT
+  }
+}
+
 resource "talos_cluster_kubeconfig" "this" {
   depends_on = [
     talos_machine_bootstrap.this
