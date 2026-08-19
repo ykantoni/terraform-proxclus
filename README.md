@@ -10,6 +10,10 @@ Talos Linux Kubernetes cluster on Proxmox VE.
 - `modules/addons/longhorn` — Longhorn, the default CSI provider for dynamic PVs
 - `addons.tf` — where addons are composed
 - `schematic.tf` — Talos image schematic, derived from `customization.yaml`
+- `apps/` — applications deployed onto this cluster, each its own
+  independent Terraform root (own state, own providers, own lifecycle); see
+  `apps/README.md` for the convention and `apps/postgres` for the reference
+  example
 
 ## Adding an addon
 
