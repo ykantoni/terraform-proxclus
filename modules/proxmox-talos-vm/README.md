@@ -14,8 +14,8 @@ This module manages:
 - fixed MAC addresses
 
 Each VM is a full clone of an existing Proxmox template (`vm_id = 9000`),
-built ahead of time by `vm-templates/` and the `make t-create`/`make
-t-destroy` targets — this module does not install Talos from an ISO itself.
+built ahead of time by `vm-templates/` and the `just t-create`/`just
+t-destroy` recipes — this module does not install Talos from an ISO itself.
 
 It does not configure Talos Linux or Kubernetes.
 

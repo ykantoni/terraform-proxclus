@@ -43,9 +43,12 @@ apply.
 
 ## Usage
 
+Task running is [`just`](https://github.com/casey/just), not Make; see
+`Justfile` for the full recipe list (`just --list`).
+
 ```bash
-make apply
-make generate   # writes ~/talosconfig and ~/.kube/config
+just apply
+just generate   # writes ~/talosconfig and ~/.kube/config
 ```
 
 `terraform apply` also writes a kubeconfig to `.kube/config` inside this
