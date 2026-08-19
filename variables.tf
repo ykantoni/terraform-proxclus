@@ -20,11 +20,6 @@ variable "bridge" {
   default     = "vmbr0"
 }
 
-variable "talos_iso" {
-  description = "Existing Talos ISO in Proxmox"
-  type        = string
-}
-
 variable "cluster_name" {
   description = "Talos/Kubernetes cluster name"
   type        = string
@@ -43,11 +38,6 @@ variable "gateway" {
 variable "nameservers" {
   description = "DNS servers"
   type        = list(string)
-}
-
-variable "talos_boot_from_iso" {
-  type    = bool
-  default = false
 }
 
 variable "controlplane_vip" {

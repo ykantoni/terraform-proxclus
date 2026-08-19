@@ -2,11 +2,9 @@
 module "proxmox_talos_vms" {
   source = "./modules/proxmox-talos-vm"
 
-  proxmox_node  = var.proxmox_node
-  datastore_id  = var.datastore_id
-  bridge        = var.bridge
-  talos_iso     = var.talos_iso
-  boot_from_iso = var.talos_boot_from_iso
+  proxmox_node = var.proxmox_node
+  datastore_id = var.datastore_id
+  bridge       = var.bridge
 
   nodes = var.nodes
 }

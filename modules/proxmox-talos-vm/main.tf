@@ -39,7 +39,7 @@ resource "proxmox_virtual_environment_vm" "talos" {
   }
 
   network_device {
-    bridge      = "vmbr0"
+    bridge      = var.bridge
     model       = "virtio"
     mac_address = each.value.mac
   }

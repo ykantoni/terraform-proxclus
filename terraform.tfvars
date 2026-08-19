@@ -4,9 +4,6 @@ proxmox_node     = "jupiter"
 datastore_id = "sdc-storage"
 bridge       = "vmbr0"
 
-talos_iso           = "local:iso/nocloud-amd64.iso"
-talos_boot_from_iso = true
-
 cluster_name     = "proxclus"
 talos_version    = "v1.13.8"
 controlplane_vip = "192.168.1.99"

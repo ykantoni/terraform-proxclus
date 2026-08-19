@@ -12,7 +12,10 @@ This module manages:
 - EFI configuration
 - virtual network interfaces
 - fixed MAC addresses
-- Talos ISO attachment
+
+Each VM is a full clone of an existing Proxmox template (`vm_id = 9000`),
+built ahead of time by `vm-templates/` and the `make t-create`/`make
+t-destroy` targets — this module does not install Talos from an ISO itself.
 
 It does not configure Talos Linux or Kubernetes.
 
@@ -21,7 +24,6 @@ It does not configure Talos Linux or Kubernetes.
 - `proxmox_node`
 - `datastore_id`
 - `bridge`
-- `talos_iso`
 - `nodes`
 
 ## Outputs

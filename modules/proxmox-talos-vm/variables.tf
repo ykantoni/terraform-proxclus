@@ -10,15 +10,6 @@ variable "bridge" {
   type = string
 }
 
-variable "talos_iso" {
-  type = string
-}
-
-variable "boot_from_iso" {
-  type    = bool
-  default = false
-}
-
 variable "nodes" {
   type = map(object({
     vm_id = number
