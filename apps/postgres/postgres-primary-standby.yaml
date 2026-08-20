@@ -1,0 +1,142 @@
+# 1. Namespace
+kubectl create namespace postgres-primary
+kubectl create namespace postgres-standby
+
+# 2. Credentials (generate a random password, or swap in your own)
+kubectl create secret generic postgres-primary-credentials \
+  --namespace postgres-primary \
+  --from-literal=POSTGRES_USER=app \
+  --from-literal=POSTGRES_PASSWORD="$(openssl rand -base64 24)" \
+  --from-literal=POSTGRES_DB=app
+kubectl create secret generic postgres-standby-credentials \
+  --namespace postgres-standby \
+  --from-literal=POSTGRES_USER=app \
+  --from-literal=POSTGRES_PASSWORD="$(openssl rand -base64 24)" \
+  --from-literal=POSTGRES_DB=app
+
+# 3. PVC — uses the cluster's default StorageClass (longhorn)
+kubectl apply -n postgres-primary -f - <<'EOF'
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-primary-data
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: longhorn
+  resources:
+    requests:
+      storage: 10Gi
+EOF
+kubectl apply -n postgres-standby -f - <<'EOF'
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-standby-data
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: longhorn
+  resources:
+    requests:
+      storage: 10Gi
+EOF
+
+# 4. Deployment
+kubectl apply -n postgres-primary -f - <<'EOF'
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres-primary
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate   # avoid two pods writing to the same RWO volume during a rollout
+  selector:
+    matchLabels:
+      app: postgres-primary
+  template:
+    metadata:
+      labels:
+        app: postgres-primary
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:17
+          envFrom:
+            - secretRef:
+                name: postgres-primary-credentials
+          env:
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          ports:
+            - containerPort: 5432
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: postgres-primary-data
+EOF
+kubectl apply -n postgres-standby -f - <<'EOF'
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres-standby
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate   # avoid two pods writing to the same RWO volume during a rollout
+  selector:
+    matchLabels:
+      app: postgres-standby
+  template:
+    metadata:
+      labels:
+        app: postgres-standby
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:17
+          envFrom:
+            - secretRef:
+                name: postgres-standby-credentials
+          env:
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          ports:
+            - containerPort: 5432
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: postgres-standby-data
+EOF
+
+# 5. Service (ClusterIP; swap type to LoadBalancer for an external IP from Cilium's pool)
+kubectl apply -n postgres-primary -f - <<'EOF'
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-primary
+spec:
+  selector:
+    app: postgres-primary
+  ports:
+    - port: 5432
+      targetPort: 5432
+EOF
+
+kubectl apply -n postgres-standby -f - <<'EOF'
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-standby
+spec:
+  selector:
+    app: postgres-standby
+  ports:
+    - port: 45432
+      targetPort: 5432
+EOF

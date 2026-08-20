@@ -29,6 +29,17 @@ locals {
         link       = "eth0"
       })
     ],
+    # Kubernetes API server cert only needs the extra SAN on control-plane
+    # nodes, since that is the only role that runs kube-apiserver.
+    var.external_ip != null ? [
+      yamlencode({
+        cluster = {
+          apiServer = {
+            certSANs = [var.external_ip]
+          }
+        }
+      })
+    ] : [],
     var.cni == "cilium" ? [
       yamlencode({
         cluster = {
@@ -118,6 +129,15 @@ data "talos_machine_configuration" "node" {
         }
       })
     ],
+    # Talos API (apid) cert, one per node, so talosctl also validates against
+    # external_ip regardless of which node's traffic the router NATs to.
+    var.external_ip != null ? [
+      yamlencode({
+        machine = {
+          certSANs = [var.external_ip]
+        }
+      })
+    ] : [],
     var.config_patches,
     each.value.role == "controlplane" ? concat(local.controlplane_patches, var.controlplane_config_patches) : var.worker_config_patches
   )

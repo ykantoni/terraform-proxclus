@@ -75,6 +75,15 @@ node subnet: outside any DHCP scope, clear of the node addresses and of
 | Control-plane VIP        | 192.168.1.99                  |
 | LoadBalancer pool        | 192.168.1.60-192.168.1.98     |
 
+Setting `external_ip` to a public IP or hostname adds it as a SAN on the
+Talos and Kubernetes API certificates, so a client outside the LAN validates
+TLS once it reaches the cluster. It doesn't configure the router: forwarding
+that public IP's port 6443 (and 50000, for `talosctl`) to `controlplane_vip`
+is a manual NAT/port-forward rule you set up separately, and the external
+client needs its own `talosconfig`/`kubeconfig` with the endpoint changed to
+`external_ip` — see `modules/talos-cluster/README.md`'s "External access"
+section.
+
 ## Storage
 
 `enable_longhorn = true` installs Longhorn and makes its `longhorn`

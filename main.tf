@@ -17,6 +17,7 @@ module "talos_cluster" {
   gateway            = var.gateway
   nameservers        = var.nameservers
   controlplane_vip   = var.controlplane_vip
+  external_ip        = var.external_ip
   cni                = var.cni
   kube_prism_port    = var.kube_prism_port
   wait_for_health    = var.wait_for_health

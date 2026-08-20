@@ -33,6 +33,23 @@ Those patches must be static YAML — a literal or `file()`. A value derived fro
 the running cluster would make the cluster depend on its own addons, which are
 in turn deployed onto it.
 
+## External access
+
+By default every generated certificate only lists the nodes' LAN addresses
+and `controlplane_vip` as valid SANs, so a client connecting from outside the
+LAN — even once a router NATs a public IP through to `controlplane_vip` —
+fails TLS verification: the address it dialed isn't one the certificate
+knows about.
+
+Setting `external_ip` (a public IP or a hostname that resolves to one) adds
+it as an extra SAN: to every node's Talos API (`apid`) certificate, and, on
+control-plane nodes only, to the Kubernetes API server certificate. That's
+the only thing this module does for external access — it does not open any
+port or configure the router's NAT/port-forward rule, which stays a manual
+step outside Terraform. `talosconfig`/`kubeconfig` endpoints still default to
+the nodes' LAN IPs, since that's what applies them; a client connecting
+externally needs its own copy pointed at `external_ip` instead.
+
 ## Health gates
 
 `data.talos_cluster_health` (`wait_for_health`) is the thorough check: Talos
@@ -66,6 +83,7 @@ that is already up does not repeat it.
 - `gateway`
 - `nameservers`
 - `controlplane_vip`
+- `external_ip`
 - `cni`
 - `kube_prism_port`
 - `wait_for_health`

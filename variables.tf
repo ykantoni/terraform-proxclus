@@ -45,6 +45,12 @@ variable "controlplane_vip" {
   default = "192.168.1.99"
 }
 
+variable "external_ip" {
+  description = "Public IP address or hostname a router NATs through to controlplane_vip, so the cluster can be reached from outside the LAN. Added to the Talos and Kubernetes API certificate SANs; the NAT rule itself is configured on the router, not by Terraform. Leave null (the default) to keep the cluster LAN-only."
+  type        = string
+  default     = "91.152.206.161"
+}
+
 variable "cni" {
   description = "Cluster CNI. cilium keeps Talos from deploying Flannel and kube-proxy and installs Cilium in their place."
   type        = string

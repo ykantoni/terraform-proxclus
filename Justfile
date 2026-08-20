@@ -10,6 +10,8 @@ apply:
 
 # Destroy everything Terraform manages: the cluster and its VMs.
 destroy:
+    kubectl -n longhorn-system patch settings.longhorn.io deleting-confirmation-flag \
+      --type=merge -p '{"value":"true"}'
     terraform destroy -auto-approve
 
 # Format all Terraform files in place.
@@ -19,6 +21,12 @@ fmt:
 # Build the Proxmox VM template (vm_id 9000) every node clones from.
 t-create:
     cd vm-templates && sudo ./nvidia-qemu-iscsi-2c.sh
+
+pg-destroy:
+    kubectl delete -f apps/postgres/postgres-primary-standby.yaml
+
+pg-create:
+    kubectl create -f apps/postgres/postgres-primary-standby.yaml      
 
 # Destroy that template.
 t-destroy:
