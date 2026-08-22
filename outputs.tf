@@ -28,6 +28,10 @@ output "load_balancer_ip_range" {
   value = one(module.cilium[*].load_balancer_ip_range)
 }
 
-output "talos_schematic_id" {
-  value = talos_image_factory_schematic.this.id
+output "talos_schematic_id_common" {
+  value = talos_image_factory_schematic.common.id
+}
+
+output "talos_schematic_id_gpu" {
+  value = talos_image_factory_schematic.gpu.id
 }

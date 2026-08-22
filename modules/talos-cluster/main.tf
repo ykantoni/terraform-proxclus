@@ -95,7 +95,7 @@ data "talos_machine_configuration" "node" {
           install = {
             disk = "/dev/sda"
 
-            image = "factory.talos.dev/metal-installer/${var.talos_schematic_id}:${var.talos_version}"
+            image = "factory.talos.dev/metal-installer/${try(each.value.pcigpu, null) != null ? var.talos_schematic_id_gpu : var.talos_schematic_id_common}:${var.talos_version}"
           }
 
           features = {

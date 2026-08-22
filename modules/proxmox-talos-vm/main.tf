@@ -15,7 +15,10 @@ resource "proxmox_virtual_environment_vm" "talos" {
     each.value.role
   ]
   clone {
-    vm_id = 9000
+    # 9000 is the plain template (vm-templates/qemu-iscsi-2c.sh); 9001 carries
+    # the NVIDIA system extensions (vm-templates/nvidia-qemu-iscsi-2c.sh) and
+    # is only for nodes with a GPU passed through.
+    vm_id = try(each.value.pcigpu, null) != null ? 9001 : 9000
     full  = true
   }
 

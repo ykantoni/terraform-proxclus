@@ -11,17 +11,18 @@ module "proxmox_talos_vms" {
 module "talos_cluster" {
   source = "./modules/talos-cluster"
 
-  cluster_name       = var.cluster_name
-  talos_version      = var.talos_version
-  talos_schematic_id = talos_image_factory_schematic.this.id
-  gateway            = var.gateway
-  nameservers        = var.nameservers
-  controlplane_vip   = var.controlplane_vip
-  external_ip        = var.external_ip
-  cni                = var.cni
-  kube_prism_port    = var.kube_prism_port
-  wait_for_health    = var.wait_for_health
-  wait_for_api       = var.wait_for_api
+  cluster_name              = var.cluster_name
+  talos_version             = var.talos_version
+  talos_schematic_id_common = talos_image_factory_schematic.common.id
+  talos_schematic_id_gpu    = talos_image_factory_schematic.gpu.id
+  gateway                   = var.gateway
+  nameservers               = var.nameservers
+  controlplane_vip          = var.controlplane_vip
+  external_ip               = var.external_ip
+  cni                       = var.cni
+  kube_prism_port           = var.kube_prism_port
+  wait_for_health           = var.wait_for_health
+  wait_for_api              = var.wait_for_api
 
   config_patches = var.enable_longhorn ? [
     file("${path.module}/modules/addons/longhorn/patches/longhorn-mounts.patch.yaml")

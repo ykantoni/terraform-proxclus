@@ -4,6 +4,9 @@
 # line shares state (cd, variables) — so none of these need Make's `.ONESHELL:`
 # or a bash -c wrapper to string commands together.
 
+plan:
+    terraform plan
+
 # Apply the Terraform configuration.
 apply:
     terraform apply -auto-approve
@@ -18,19 +21,23 @@ destroy:
 fmt:
     terraform fmt -recursive
 
-# Build the Proxmox VM template (vm_id 9000) every node clones from.
+# Build both Proxmox VM templates: the plain one (vm_id 9000) common nodes
+# clone from, and the NVIDIA one (vm_id 9001) GPU-tagged nodes clone from.
 t-create:
-    cd vm-templates && sudo ./nvidia-qemu-iscsi-2c.sh
+    /usr/bin/bash -c "pushd vm-templates && sudo ./qemu-iscsi-2c.sh && sudo ./nvidia-qemu-iscsi-2c.sh && popd"
 
+# Destroy the Postgres cluster.
 pg-destroy:
-    kubectl delete -f apps/postgres/postgres-primary-standby.yaml
+    kubectl delete -f apps/postgres/postgres-primary-standby.yaml --ignore-not-found
 
+# Create the Postgres cluster.
 pg-create:
-    kubectl create -f apps/postgres/postgres-primary-standby.yaml      
+    kubectl apply -f apps/postgres/postgres-primary-standby.yaml
 
-# Destroy that template.
+# Destroy both templates.
 t-destroy:
     sudo /usr/sbin/qm destroy 9000
+    sudo /usr/sbin/qm destroy 9001
 
 # Write talosconfig and kubeconfig from Terraform outputs.
 generate:

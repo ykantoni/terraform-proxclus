@@ -34,7 +34,7 @@ nameservers = [
 
 nodes = {
   cp1 = {
-    vm_id  = 9001
+    vm_id  = 10000
     name   = "cp1"
     ip     = "192.168.1.201"
     mac    = "BC:24:11:00:01:01"
@@ -45,7 +45,7 @@ nodes = {
   }
 
   worker1 = {
-    vm_id  = 9002
+    vm_id  = 10001
     name   = "w1"
     ip     = "192.168.1.202"
     mac    = "BC:24:11:00:01:02"
@@ -57,7 +57,7 @@ nodes = {
   }
 
   worker2 = {
-    vm_id  = 9003
+    vm_id  = 10002
     name   = "w2"
     ip     = "192.168.1.203"
     mac    = "BC:24:11:00:01:03"
@@ -68,7 +68,7 @@ nodes = {
   }
 
   worker3 = {
-    vm_id  = 9004
+    vm_id  = 10003
     name   = "w3"
     ip     = "192.168.1.204"
     mac    = "BC:24:11:00:01:04"

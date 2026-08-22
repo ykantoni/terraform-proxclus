@@ -1,55 +1,79 @@
 # 1. Namespace
-kubectl create namespace postgres-primary
-kubectl create namespace postgres-standby
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: postgres-primary
+
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: postgres-standby
+
 
 # 2. Credentials (generate a random password, or swap in your own)
-kubectl create secret generic postgres-primary-credentials \
-  --namespace postgres-primary \
-  --from-literal=POSTGRES_USER=app \
-  --from-literal=POSTGRES_PASSWORD="$(openssl rand -base64 24)" \
-  --from-literal=POSTGRES_DB=app
-kubectl create secret generic postgres-standby-credentials \
-  --namespace postgres-standby \
-  --from-literal=POSTGRES_USER=app \
-  --from-literal=POSTGRES_PASSWORD="$(openssl rand -base64 24)" \
-  --from-literal=POSTGRES_DB=app
+---
+apiVersion: v1
+stringData:
+  POSTGRES_DB: app
+  POSTGRES_PASSWORD: OFIwSFUrZEcvNTFoUC9TWg==
+  POSTGRES_USER: app
+kind: Secret
+metadata:
+  name: postgres-primary-credentials
+  namespace: postgres-primary
+type: Opaque
+
+---
+apiVersion: v1
+stringData:
+  POSTGRES_DB: app
+  POSTGRES_PASSWORD: dU5CelIwUlFmYlFFOTdHVw==
+  POSTGRES_USER: app
+kind: Secret
+metadata:
+  name: postgres-standby-credentials
+  namespace: postgres-standby
+type: Opaque
 
 # 3. PVC — uses the cluster's default StorageClass (longhorn)
-kubectl apply -n postgres-primary -f - <<'EOF'
+---
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: postgres-primary-data
+  namespace: postgres-primary
 spec:
   accessModes: ["ReadWriteOnce"]
   storageClassName: longhorn
   resources:
     requests:
       storage: 10Gi
-EOF
-kubectl apply -n postgres-standby -f - <<'EOF'
+
+---
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: postgres-standby-data
+  namespace: postgres-standby
 spec:
   accessModes: ["ReadWriteOnce"]
   storageClassName: longhorn
   resources:
     requests:
       storage: 10Gi
-EOF
+
 
 # 4. Deployment
-kubectl apply -n postgres-primary -f - <<'EOF'
+---
 apiVersion: apps/v1
-kind: Deployment
+kind: StatefulSet
 metadata:
   name: postgres-primary
+  namespace: postgres-primary
 spec:
   replicas: 1
-  strategy:
-    type: Recreate   # avoid two pods writing to the same RWO volume during a rollout
   selector:
     matchLabels:
       app: postgres-primary
@@ -76,16 +100,15 @@ spec:
         - name: data
           persistentVolumeClaim:
             claimName: postgres-primary-data
-EOF
-kubectl apply -n postgres-standby -f - <<'EOF'
+
+---
 apiVersion: apps/v1
-kind: Deployment
+kind: StatefulSet
 metadata:
   name: postgres-standby
+  namespace: postgres-standby
 spec:
   replicas: 1
-  strategy:
-    type: Recreate   # avoid two pods writing to the same RWO volume during a rollout
   selector:
     matchLabels:
       app: postgres-standby
@@ -112,31 +135,35 @@ spec:
         - name: data
           persistentVolumeClaim:
             claimName: postgres-standby-data
-EOF
+
 
 # 5. Service (ClusterIP; swap type to LoadBalancer for an external IP from Cilium's pool)
-kubectl apply -n postgres-primary -f - <<'EOF'
+---
 apiVersion: v1
 kind: Service
 metadata:
   name: postgres-primary
+  namespace: postgres-primary
 spec:
   selector:
     app: postgres-primary
+  type: LoadBalancer
   ports:
     - port: 5432
       targetPort: 5432
-EOF
 
-kubectl apply -n postgres-standby -f - <<'EOF'
+
+---
 apiVersion: v1
 kind: Service
 metadata:
   name: postgres-standby
+  namespace: postgres-standby
 spec:
   selector:
     app: postgres-standby
+  type: LoadBalancer
   ports:
     - port: 45432
       targetPort: 5432
-EOF
+

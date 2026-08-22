@@ -14,8 +14,13 @@ variable "nameservers" {
   type = list(string)
 }
 
-variable "talos_schematic_id" {
-  description = "Talos Image Factory schematic ID"
+variable "talos_schematic_id_common" {
+  description = "Talos Image Factory schematic ID for nodes without a pcigpu"
+  type        = string
+}
+
+variable "talos_schematic_id_gpu" {
+  description = "Talos Image Factory schematic ID for nodes with a pcigpu"
   type        = string
 }
 
