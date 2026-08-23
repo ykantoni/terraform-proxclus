@@ -8,6 +8,8 @@ Talos Linux Kubernetes cluster on Proxmox VE.
 - `modules/talos-cluster` — Talos machine configuration and cluster bootstrap
 - `modules/addons/cilium` — Cilium and its LoadBalancer address pool
 - `modules/addons/longhorn` — Longhorn, the default CSI provider for dynamic PVs
+- `modules/addons/nvidia-device-plugin` — NVIDIA device plugin, so a mapped GPU
+  shows up as an `nvidia.com/gpu` resource
 - `addons.tf` — where addons are composed
 - `schematic.tf` — Talos image schematic, derived from `customization.yaml`
 - `apps/` — applications deployed onto this cluster, each its own
@@ -98,6 +100,26 @@ which Longhorn's engine needs on the host, are already in
 worker count) tune the release; see `modules/addons/longhorn/README.md` for
 what else the module sets and why.
 
+## GPU
+
+Setting `pcigpu` on a node in `var.nodes` passes that PCI device through to
+the VM (see `modules/proxmox-talos-vm`), boots it from the GPU image
+schematic instead of the common one, and loads the NVIDIA kernel modules
+(see `schematic.tf` and `modules/talos-cluster/patches/nvidia-modules.patch.yaml`).
+Nothing else needs flipping: as soon as any node sets `pcigpu`,
+`module.nvidia_device_plugin` installs the NVIDIA device plugin so that
+node's GPU shows up as an `nvidia.com/gpu` resource for Kubernetes to
+schedule against, and creates the `nvidia` `RuntimeClass` GPU pods must set
+via `spec.runtimeClassName` to actually reach the GPU. See
+`modules/addons/nvidia-device-plugin/README.md` for what the module sets and
+why, including the pod-spec shape a GPU workload needs.
+
+`nvidia_device_plugin_version` tunes the chart version; there's no matching
+enable flag; unlike `enable_longhorn`, presence is derived entirely from
+`pcigpu`, which is already the single source of truth this repo uses to
+decide the schematic and kernel-module patch, so a second, independently
+toggled flag would only be one more thing to keep in sync.
+
 ## Ordering
 
 Bootstrapping only means Talos accepted the call, so the addons need
@@ -113,7 +135,7 @@ cluster uses two independent gates, both in `modules/talos-cluster`:
   once per cluster lifetime (a fresh build after `terraform destroy`
   re-triggers it) and needs `curl` on the machine running `terraform apply`.
 
-Cilium and Longhorn both depend on `module.talos_cluster` as a whole, which is
+Cilium, Longhorn, and the NVIDIA device plugin all depend on `module.talos_cluster` as a whole, which is
 enough: a module-level `depends_on` waits on every resource inside that
 module, `terraform_data.wait_for_api` included, with no extra wiring needed
 in `addons.tf`.

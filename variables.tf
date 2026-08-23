@@ -104,6 +104,12 @@ variable "longhorn_replica_count" {
   default     = 3
 }
 
+variable "nvidia_device_plugin_version" {
+  description = "nvidia-device-plugin Helm chart version. Only installed when at least one node in var.nodes sets pcigpu; see modules/addons/nvidia-device-plugin."
+  type        = string
+  default     = "0.20.0"
+}
+
 variable "load_balancer_ip_range" {
   description = "Inclusive address range Cilium hands to LoadBalancer services. Must be free on the node subnet."
 
