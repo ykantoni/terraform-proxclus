@@ -41,7 +41,7 @@ nodes = {
     role   = "controlplane"
     cores  = 2
     memory = 6144
-    disk   = 32
+    disk   = 50
   }
 
   worker1 = {
@@ -52,7 +52,7 @@ nodes = {
     role   = "worker"
     cores  = 4
     memory = 12284
-    disk   = 32
+    disk   = 50
     pcigpu = "RTX5060Ti"
   }
 
@@ -64,7 +64,7 @@ nodes = {
     role   = "worker"
     cores  = 4
     memory = 8192
-    disk   = 32
+    disk   = 50
   }
 
   worker3 = {
@@ -75,6 +75,6 @@ nodes = {
     role   = "worker"
     cores  = 4
     memory = 8192
-    disk   = 32
+    disk   = 50
   }
 }

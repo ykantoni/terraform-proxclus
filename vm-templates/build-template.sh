@@ -70,7 +70,7 @@ sudo /usr/sbin/qm importdisk "${VMID}" "${RAW_IMAGE}" sdc-storage
 
 sudo /usr/sbin/qm set "${VMID}" --scsihw virtio-scsi-pci --scsi0 "sdc-storage:${VMID}/vm-${VMID}-disk-1.raw"
 
-sudo /usr/sbin/qm resize "${VMID}" scsi0 32G
+sudo /usr/sbin/qm resize "${VMID}" scsi0 50G
 
 sudo /usr/sbin/qm set "${VMID}" --boot order=scsi0
 sudo /usr/sbin/qm set "${VMID}" --serial0 socket
