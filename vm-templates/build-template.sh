@@ -38,22 +38,29 @@ SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 CUSTOMIZATION_FILE="${SCRIPT_DIR}/../customization-${IMAGE_TYPE}.yaml"
 RAW_IMAGE="/tmp/nocloud-${IMAGE_TYPE}-amd64.raw"
 
-# Same customization-*.yaml Terraform derives the installer schematic from, so the
-# template image and the machine configuration can never reference different
-# extension sets.
-SCHEMATIC_ID=$(/usr/bin/curl -X POST -sf --data-binary @"${CUSTOMIZATION_FILE}" https://factory.talos.dev/schematics | jq -r .id)
-echo "schematic: ${SCHEMATIC_ID}"
+if [[ -f "${RAW_IMAGE}" ]]; then
+  # Already have a decompressed image from a previous run (e.g. a qm
+  # create/import retry after this script failed partway through) — reuse
+  # it as-is rather than re-resolving the schematic and re-downloading.
+  echo "raw image already exists at ${RAW_IMAGE}, skipping schematic lookup and download"
+else
+  # Same customization-*.yaml Terraform derives the installer schematic from, so the
+  # template image and the machine configuration can never reference different
+  # extension sets.
+  SCHEMATIC_ID=$(/usr/bin/curl -X POST -sf --data-binary @"${CUSTOMIZATION_FILE}" https://factory.talos.dev/schematics | jq -r .id)
+  echo "schematic: ${SCHEMATIC_ID}"
 
-# Drop any stale download from a previous run before fetching a fresh one:
-# a prior interrupted run can leave one of these owned or locked in a way
-# that a plain overwrite can't get past, even as root.
-sudo rm -f "${RAW_IMAGE}.xz" "${RAW_IMAGE}"
+  # Drop any stale download from a previous run before fetching a fresh one:
+  # a prior interrupted run can leave one of these owned or locked in a way
+  # that a plain overwrite can't get past, even as root.
+  sudo rm -f "${RAW_IMAGE}.xz" "${RAW_IMAGE}"
 
-sudo /usr/bin/wget -O "${RAW_IMAGE}.xz" "https://factory.talos.dev/image/${SCHEMATIC_ID}/${TALOS_VERSION}/nocloud-amd64.raw.xz"
+  sudo /usr/bin/wget -O "${RAW_IMAGE}.xz" "https://factory.talos.dev/image/${SCHEMATIC_ID}/${TALOS_VERSION}/nocloud-amd64.raw.xz"
 
-# xz always decompresses alongside the source name, so land it under a
-# type-specific name in case common and gpu builds run back to back.
-sudo /usr/bin/xz -d -k -f "${RAW_IMAGE}.xz"
+  # xz always decompresses alongside the source name, so land it under a
+  # type-specific name in case common and gpu builds run back to back.
+  sudo /usr/bin/xz -d -k -f "${RAW_IMAGE}.xz"
+fi
 
 sudo /usr/sbin/qm create "${VMID}" \
   --name "${VM_NAME}" \

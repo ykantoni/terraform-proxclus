@@ -23,6 +23,16 @@ locals {
     for name, ip in local.node_internal_ips :
     name if contains(var.gpu_node_ips, ip)
   ]
+
+  # ip -> Kubernetes Node name, for the label resource below. Only entries
+  # for GPU nodes are needed, but keying this by IP (not name) is what
+  # matters: it lets that resource's for_each use var.gpu_node_ips, which is
+  # static and known at plan time, instead of this data-source-derived
+  # mapping, which is not.
+  gpu_ip_to_node_name = {
+    for name, ip in local.node_internal_ips :
+    ip => name if ip != null && contains(var.gpu_node_ips, ip)
+  }
 }
 
 # Registers the "nvidia" containerd runtime the siderolabs/nvidia-container-toolkit
@@ -42,14 +52,24 @@ resource "kubernetes_runtime_class_v1" "nvidia" {
 # (that's normally Node Feature Discovery's job); labelling the nodes this
 # module already knows have a GPU and feeding the same label back in as the
 # chart's nodeSelector gets the same result without pulling in NFD.
+#
+# for_each is keyed on var.gpu_node_ips rather than local.gpu_node_names on
+# purpose: the names come from data.kubernetes_nodes.all, and that data
+# source is read through the kubernetes provider, whose config depends on
+# local_sensitive_file.kubeconfig. On `terraform destroy` that file is also
+# being destroyed, so Terraform treats anything read through the provider as
+# unknown until apply — an unknown for_each set is a hard error. IPs come
+# straight from a variable, so they stay known even mid-destroy; the (still
+# data-source-derived) node name only has to be a plain attribute below,
+# which is allowed to be unknown.
 resource "kubernetes_labels" "gpu_node" {
-  for_each = toset(local.gpu_node_names)
+  for_each = toset(var.gpu_node_ips)
 
   api_version = "v1"
   kind        = "Node"
 
   metadata {
-    name = each.value
+    name = local.gpu_ip_to_node_name[each.value]
   }
 
   labels = {

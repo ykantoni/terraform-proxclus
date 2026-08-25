@@ -12,9 +12,14 @@ apply:
     terraform apply -auto-approve
 
 # Destroy everything Terraform manages: the cluster and its VMs.
+# The patch only runs if the apiserver is reachable: if the cluster's
+# already gone (e.g. this is a re-run after a prior destroy succeeded),
+# there's nothing left for Longhorn's setting to guard anyway.
 destroy:
-    kubectl -n longhorn-system patch settings.longhorn.io deleting-confirmation-flag \
-      --type=merge -p '{"value":"true"}'
+    if kubectl cluster-info --request-timeout=5s >/dev/null 2>&1; then \
+      kubectl -n longhorn-system patch settings.longhorn.io deleting-confirmation-flag \
+        --type=merge -p '{"value":"true"}'; \
+    fi
     terraform destroy -auto-approve
 
 # Format all Terraform files in place.
