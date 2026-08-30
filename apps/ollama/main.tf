@@ -7,25 +7,73 @@ resource "kubernetes_namespace" "ollama" {
 # Same idea ../postgres-cnpg/README.md already flags as worth doing: the
 # platform's own "longhorn" StorageClass replicates 3x, which this cluster's
 # small VM disks (32Gi default root filesystem) can't fit a many-GB model
-# cache into across 3 separate nodes at once. Models are re-downloadable, so
-# a single replica is enough redundancy for them, and needing only one node
-# with room instead of three is what actually lets ollama_storage_size hold
-# a real model on this hardware.
+# cache into across 3 separate nodes at once — and even single-replica
+# Longhorn still pays for an iSCSI target/engine pod on top of the same
+# node's disk. Models are re-downloadable, so neither replication nor
+# Longhorn's engine overhead buys anything here: a plain directory on the
+# GPU node's own filesystem, statically provisioned as a "local" PV, is both
+# simpler and lets ollama_storage_size use that disk directly.
 resource "kubernetes_storage_class_v1" "ollama_models" {
   metadata {
-    name = "longhorn-single-replica"
+    name = "ollama-local"
   }
 
-  storage_provisioner    = "driver.longhorn.io"
-  reclaim_policy         = "Delete"
-  volume_binding_mode    = "Immediate"
-  allow_volume_expansion = true
+  storage_provisioner = "kubernetes.io/no-provisioner"
+  reclaim_policy      = "Retain"
+  # "local" volumes bind only after a pod that needs them is scheduled — the
+  # scheduler is what actually evaluates the PV's node_affinity below. With
+  # Immediate binding (Longhorn's mode) the PVC could bind before the pod
+  # exists, ignoring the node the volume is pinned to.
+  volume_binding_mode    = "WaitForFirstConsumer"
+  allow_volume_expansion = false
+}
 
-  parameters = {
-    numberOfReplicas    = "1"
-    staleReplicaTimeout = "30"
-    fromBackup          = ""
-    fsType              = "ext4"
+# Statically provisioned: "local" volumes have no dynamic provisioner, so
+# this PV — and the directory it points at on the node — has to exist before
+# the chart's PVC can bind to it. Create ollama_storage_path on that node
+# (matching gpu_node_selector) first; on Talos that directory needs to be
+# one the kubelet's mount namespace already exposes to pods (see
+# modules/addons/longhorn/patches for the extraMounts pattern this cluster
+# uses for the same problem), or an extraMounts patch for it added the same
+# way.
+resource "kubernetes_persistent_volume_v1" "ollama_models" {
+  metadata {
+    name = "ollama-models"
+  }
+
+  spec {
+    capacity = {
+      storage = var.ollama_storage_size
+    }
+    access_modes                     = ["ReadWriteOnce"]
+    persistent_volume_reclaim_policy = "Retain"
+    storage_class_name               = kubernetes_storage_class_v1.ollama_models.metadata[0].name
+
+    persistent_volume_source {
+      local {
+        path = var.ollama_storage_path
+      }
+    }
+
+    # Pins this PV to whichever node gpu_node_selector's labels match — the
+    # same node Ollama's pod itself targets — since a "local" volume's data
+    # only exists on that one node's disk. A pod claiming this PV is
+    # scheduled onto that node regardless of the pod's own nodeSelector, so
+    # this holds even when gpu_enabled = false.
+    node_affinity {
+      required {
+        node_selector_term {
+          dynamic "match_expressions" {
+            for_each = var.gpu_node_selector
+            content {
+              key      = match_expressions.key
+              operator = "In"
+              values   = [match_expressions.value]
+            }
+          }
+        }
+      }
+    }
   }
 }
 
@@ -66,7 +114,8 @@ locals {
 
 resource "helm_release" "ollama" {
   depends_on = [
-    kubernetes_namespace.ollama
+    kubernetes_namespace.ollama,
+    kubernetes_persistent_volume_v1.ollama_models,
   ]
 
   name      = "ollama"

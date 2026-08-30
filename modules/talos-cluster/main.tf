@@ -152,7 +152,17 @@ resource "talos_machine_configuration_apply" "node" {
 
   machine_configuration_input = data.talos_machine_configuration.node[each.key].machine_configuration
   config_patches = concat(
-    try(each.value.pcigpu, null) != null ? [file("${path.module}/patches/nvidia-modules.patch.yaml")] : []
+    try(each.value.pcigpu, null) != null ? [
+      file("${path.module}/patches/nvidia-modules.patch.yaml"),
+      # Exposes /var/lib/ollama-models to the kubelet's mount namespace, the
+      # same way modules/addons/longhorn/patches does for /var/lib/longhorn.
+      # Only the GPU node needs it: apps/ollama's "local" PersistentVolume
+      # (kubernetes_persistent_volume_v1.ollama_models there) is pinned to
+      # this node and this path by default. Without this patch the kubelet
+      # reports "MountVolume.NewMounter initialization failed ... path
+      # does not exist" even once the directory itself is created.
+      file("${path.module}/patches/ollama-models-mounts.patch.yaml"),
+    ] : []
   )
 }
 

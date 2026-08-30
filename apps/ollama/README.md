@@ -31,10 +31,11 @@ root, not a module of the platform or of each other:
   only schedules onto — and only ever runs on — a node with a GPU. A
   `persistentVolume` (`ollama_storage_size`, default `15Gi`) stores pulled
   models so they survive pod restarts.
-- `kubernetes_storage_class_v1.ollama_models` (`longhorn-single-replica`) —
-  a Longhorn StorageClass with `numberOfReplicas: "1"`, used by that PVC
-  instead of the platform's 3x-replicated `longhorn` default. See "Storage"
-  below for why.
+- `kubernetes_storage_class_v1.ollama_models` (`ollama-local`) and
+  `kubernetes_persistent_volume_v1.ollama_models` — a no-provisioner
+  StorageClass backed by a statically provisioned `local` PV pointed at
+  `ollama_storage_path` on the GPU node, used by that PVC instead of the
+  platform's `longhorn` default. See "Storage" below for why.
 - `helm_release.open_webui` — the chat UI, pointed at the Ollama release
   above via `ollamaUrls` (its own bundled Ollama subchart is disabled),
   exposed as a `LoadBalancer` Service by default since this cluster runs no
@@ -68,17 +69,27 @@ every volume 3x on 3 separate nodes, so it needs the *entire* requested size
 free on three nodes at once — a `30Gi` PVC fails outright on hardware this
 small (`insufficient storage;precheck new replica failed` from Longhorn),
 even with nothing else on the cluster yet. Pulled models are re-downloadable
-cache, not data worth 3x redundancy, so Ollama's PVC instead uses
-`longhorn-single-replica` (`numberOfReplicas: "1"`) — it only has to fit on
-one node, which is what makes `ollama_storage_size` able to hold a real
-model at all here. `webui_storage_size` (small, `2Gi`) stays on the platform
-default `longhorn` class, since chat history/accounts are worth actually
-replicating.
+cache, not data worth replicating, or worth Longhorn's iSCSI engine overhead
+on top of the same node's disk even at a single replica — so Ollama's PVC
+instead uses `ollama-local`: a `local` PV, statically bound to
+`ollama_storage_path` (default `/var/lib/ollama-models`) on the GPU node
+itself (`gpu_node_selector`), with no Longhorn involved at all.
+`webui_storage_size` (small, `2Gi`) stays on the platform default `longhorn`
+class, since chat history/accounts are worth actually replicating.
 
-Set `ollama_storage_class = "longhorn"` to opt back into 3x replication, and
-raise `var.nodes[*].disk` on the GPU node in the root module first if you do
-— or if you need more room for bigger models than `ollama_storage_size`'s
-default leaves space for.
+Because it's statically provisioned, that directory has to already exist,
+be writable, and persist across reboots on the GPU node *before* `terraform
+apply` — Terraform only creates the `PersistentVolume` object, not the
+directory it points at. On Talos, a path also generally needs an
+`extraMounts` patch on that node's machine config before pods can use it
+(see `../../modules/addons/longhorn/patches/longhorn-mounts.patch.yaml` for
+the pattern this cluster already uses to expose `/var/lib/longhorn` the same
+way).
+
+Set `ollama_storage_class = "longhorn"` to go back to Longhorn-backed
+storage instead, and raise `var.nodes[*].disk` on the GPU node in the root
+module first if you do — or if you need more room for bigger models than
+`ollama_storage_size`'s default leaves space for on the local disk.
 
 ## Platform dependency
 

@@ -61,9 +61,15 @@ variable "ollama_storage_size" {
 }
 
 variable "ollama_storage_class" {
-  description = "StorageClass for Ollama's model PVC. Empty string (the default) uses this stack's own kubernetes_storage_class_v1.ollama_models, a Longhorn StorageClass with numberOfReplicas=1 instead of the platform default's 3 — pulled models are re-downloadable cache, not data worth 3x replicating, and this cluster's small VM disks (32Gi default) can't fit ollama_storage_size on 3 separate nodes at once the way the platform's \"longhorn\" StorageClass would require. Set to \"longhorn\" explicitly to opt back into 3x replication if the nodes' disks are sized up for it."
+  description = "StorageClass for Ollama's model PVC. Empty string (the default) uses this stack's own kubernetes_storage_class_v1.ollama_models (\"ollama-local\"), a no-provisioner StorageClass bound to kubernetes_persistent_volume_v1.ollama_models — a \"local\" PV pointed at ollama_storage_path on the GPU node itself. Pulled models are re-downloadable cache, not data worth replicating (or worth Longhorn's engine overhead on top of the same node's disk), so this bypasses Longhorn entirely instead of just cutting its replica count. Set to \"longhorn\" (or \"longhorn-single-replica\", if you recreate that class) to go back to Longhorn-backed storage."
   type        = string
   default     = ""
+}
+
+variable "ollama_storage_path" {
+  description = "Absolute directory path on the GPU node's own filesystem (matching gpu_node_selector) backing kubernetes_persistent_volume_v1.ollama_models. \"local\" PVs are statically provisioned: this directory must already exist on that node, be writable, and persist across reboots before helm_release.ollama's PVC can bind — Terraform does not create it. On Talos that typically means it also needs to be a path the kubelet's mount namespace exposes to pods, via an extraMounts patch on that node's machine config (see modules/addons/longhorn/patches/longhorn-mounts.patch.yaml for the pattern this cluster already uses for the same problem)."
+  type        = string
+  default     = "/var/lib/ollama-models"
 }
 
 variable "ollama_extra_values" {
