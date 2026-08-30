@@ -124,18 +124,29 @@ spec:
 
 # 5. Deployment
 #
-#    Each StatefulSet's initContainer apt-get installs postgresql-plpython3-17
-#    (+ its python3/libexpat deps) into a shared emptyDir, then the main
-#    container mounts just those specific files back at their original
-#    absolute paths — never a whole real system directory, so nothing already
-#    living in e.g. /usr/lib/postgresql/17/lib or the extension dir gets
-#    hidden. Verified against this exact image (postgres:17, Debian
-#    trixie/13, Python 3.13.5, postgresql-plpython3-17 17.11) by installing it
-#    in a scratch pod and confirming CREATE EXTENSION plpython3u loads and
-#    runs. If a postgres:17 image rebuild ever bumps the bundled Python minor
-#    version, the hardcoded "3.13" paths below need to move with it — check
-#    with `kubectl exec <pod> -c install-plpython3 -- python3 --version`
-#    (add a temporary `sleep infinity` to the args to keep it alive to check).
+#    Each StatefulSet has two apt-get initContainers that stage extension
+#    files into a shared emptyDir, then the main container mounts just those
+#    specific files back at their original absolute paths — never a whole
+#    real system directory, so nothing already living in e.g.
+#    /usr/lib/postgresql/17/lib or the extension dir gets hidden:
+#      - install-plpython3 installs postgresql-plpython3-17 (+ its
+#        python3/libexpat deps). Verified against this exact image
+#        (postgres:17, Debian trixie/13, Python 3.13.5,
+#        postgresql-plpython3-17 17.11) by installing it in a scratch pod and
+#        confirming CREATE EXTENSION plpython3u loads and runs. If a
+#        postgres:17 image rebuild ever bumps the bundled Python minor
+#        version, the hardcoded "3.13" paths below need to move with it —
+#        check with `kubectl exec <pod> -c install-plpython3 -- python3
+#        --version` (add a temporary `sleep infinity` to the args to keep it
+#        alive to check).
+#      - install-pldbgapi installs postgresql-17-pldebugger (the pldbgapi
+#        extension, used by debugger clients like pgAdmin to step through
+#        plpgsql functions). No extra runtime libs needed — its only
+#        dependency, libc6, is already in the image. The postgres container
+#        also sets shared_preload_libraries=plugin_debugger (see its args
+#        below), which is required for indirect/global debugging (pgAdmin's
+#        "Debug" button waiting on any session) — plain CREATE EXTENSION
+#        pldbgapi alone only covers direct debugging.
 ---
 apiVersion: apps/v1
 kind: StatefulSet
@@ -195,6 +206,32 @@ spec:
           volumeMounts:
             - name: pyext
               mountPath: /pyext
+        - name: install-pldbgapi
+          image: postgres:17
+          # Same apt-get-as-root story as install-plpython3 above. No extra
+          # runtime libs to stage here — pldebugger's only dependency is
+          # libc6, already present in the image.
+          securityContext:
+            runAsNonRoot: false
+            runAsUser: 0
+            runAsGroup: 0
+            allowPrivilegeEscalation: false
+          command: ["bash", "-c"]
+          args:
+            - |
+              set -euo pipefail
+              apt-get update -qq
+              apt-get install -y --no-install-recommends postgresql-17-pldebugger
+              mkdir -p /pyext/dbglib /pyext/dbgext
+              cp -a /usr/lib/postgresql/17/lib/plugin_debugger.so /pyext/dbglib/
+              cp -a /usr/share/postgresql/17/extension/pldbgapi.control \
+                    /usr/share/postgresql/17/extension/pldbgapi--1.1.sql \
+                    /usr/share/postgresql/17/extension/pldbgapi--1.0--1.1.sql \
+                    /usr/share/postgresql/17/extension/pldbgapi--unpackaged--1.1.sql \
+                    /pyext/dbgext/
+          volumeMounts:
+            - name: pyext
+              mountPath: /pyext
       containers:
         - name: postgres
           image: postgres:17
@@ -210,7 +247,13 @@ spec:
               value: /var/lib/postgresql/data/pgdata
             - name: LD_LIBRARY_PATH
               value: /usr/local/lib/pgextra
-          args: ["-c", "hba_file=/etc/postgresql/custom/pg_hba.conf"]
+          # shared_preload_libraries enables indirect/global pldbgapi
+          # debugging (pgAdmin's "Debug" button waiting on any session,
+          # not just one launched through the debugger) — plugin_debugger.so
+          # must already be in place at postmaster startup, which it is
+          # since the install-pldbgapi initContainer mounts it before this
+          # container starts.
+          args: ["-c", "hba_file=/etc/postgresql/custom/pg_hba.conf", "-c", "shared_preload_libraries=plugin_debugger"]
           ports:
             - containerPort: 5432
           volumeMounts:
@@ -242,6 +285,26 @@ spec:
             - name: pyext
               mountPath: /usr/local/lib/pgextra
               subPath: rtlib
+              readOnly: true
+            - name: pyext
+              mountPath: /usr/lib/postgresql/17/lib/plugin_debugger.so
+              subPath: dbglib/plugin_debugger.so
+              readOnly: true
+            - name: pyext
+              mountPath: /usr/share/postgresql/17/extension/pldbgapi.control
+              subPath: dbgext/pldbgapi.control
+              readOnly: true
+            - name: pyext
+              mountPath: /usr/share/postgresql/17/extension/pldbgapi--1.1.sql
+              subPath: dbgext/pldbgapi--1.1.sql
+              readOnly: true
+            - name: pyext
+              mountPath: /usr/share/postgresql/17/extension/pldbgapi--1.0--1.1.sql
+              subPath: dbgext/pldbgapi--1.0--1.1.sql
+              readOnly: true
+            - name: pyext
+              mountPath: /usr/share/postgresql/17/extension/pldbgapi--unpackaged--1.1.sql
+              subPath: dbgext/pldbgapi--unpackaged--1.1.sql
               readOnly: true
       volumes:
         - name: data
@@ -304,6 +367,32 @@ spec:
           volumeMounts:
             - name: pyext
               mountPath: /pyext
+        - name: install-pldbgapi
+          image: postgres:17
+          # Same apt-get-as-root story as install-plpython3 above. No extra
+          # runtime libs to stage here — pldebugger's only dependency is
+          # libc6, already present in the image.
+          securityContext:
+            runAsNonRoot: false
+            runAsUser: 0
+            runAsGroup: 0
+            allowPrivilegeEscalation: false
+          command: ["bash", "-c"]
+          args:
+            - |
+              set -euo pipefail
+              apt-get update -qq
+              apt-get install -y --no-install-recommends postgresql-17-pldebugger
+              mkdir -p /pyext/dbglib /pyext/dbgext
+              cp -a /usr/lib/postgresql/17/lib/plugin_debugger.so /pyext/dbglib/
+              cp -a /usr/share/postgresql/17/extension/pldbgapi.control \
+                    /usr/share/postgresql/17/extension/pldbgapi--1.1.sql \
+                    /usr/share/postgresql/17/extension/pldbgapi--1.0--1.1.sql \
+                    /usr/share/postgresql/17/extension/pldbgapi--unpackaged--1.1.sql \
+                    /pyext/dbgext/
+          volumeMounts:
+            - name: pyext
+              mountPath: /pyext
       containers:
         - name: postgres
           image: postgres:17
@@ -319,7 +408,13 @@ spec:
               value: /var/lib/postgresql/data/pgdata
             - name: LD_LIBRARY_PATH
               value: /usr/local/lib/pgextra
-          args: ["-c", "hba_file=/etc/postgresql/custom/pg_hba.conf"]
+          # shared_preload_libraries enables indirect/global pldbgapi
+          # debugging (pgAdmin's "Debug" button waiting on any session,
+          # not just one launched through the debugger) — plugin_debugger.so
+          # must already be in place at postmaster startup, which it is
+          # since the install-pldbgapi initContainer mounts it before this
+          # container starts.
+          args: ["-c", "hba_file=/etc/postgresql/custom/pg_hba.conf", "-c", "shared_preload_libraries=plugin_debugger"]
           ports:
             - containerPort: 5432
           volumeMounts:
@@ -351,6 +446,26 @@ spec:
             - name: pyext
               mountPath: /usr/local/lib/pgextra
               subPath: rtlib
+              readOnly: true
+            - name: pyext
+              mountPath: /usr/lib/postgresql/17/lib/plugin_debugger.so
+              subPath: dbglib/plugin_debugger.so
+              readOnly: true
+            - name: pyext
+              mountPath: /usr/share/postgresql/17/extension/pldbgapi.control
+              subPath: dbgext/pldbgapi.control
+              readOnly: true
+            - name: pyext
+              mountPath: /usr/share/postgresql/17/extension/pldbgapi--1.1.sql
+              subPath: dbgext/pldbgapi--1.1.sql
+              readOnly: true
+            - name: pyext
+              mountPath: /usr/share/postgresql/17/extension/pldbgapi--1.0--1.1.sql
+              subPath: dbgext/pldbgapi--1.0--1.1.sql
+              readOnly: true
+            - name: pyext
+              mountPath: /usr/share/postgresql/17/extension/pldbgapi--unpackaged--1.1.sql
+              subPath: dbgext/pldbgapi--unpackaged--1.1.sql
               readOnly: true
       volumes:
         - name: data
