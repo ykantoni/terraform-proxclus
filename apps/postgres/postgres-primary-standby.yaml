@@ -37,7 +37,130 @@ metadata:
   namespace: postgres-standby
 type: Opaque
 
-# 3. PVC — uses the cluster's default StorageClass (longhorn)
+# 3. pg_hba.conf — declared here instead of hand-edited in the running pod,
+#    so it survives pod/PVC recreation and changes go through `kubectl apply`.
+#    Mounted as a directory (not subPath) so ConfigMap edits actually
+#    propagate into the pod; Postgres still needs a reload to pick them up:
+#      kubectl exec -n postgres-primary postgres-primary-0 -- \
+#        psql -U app -c "SELECT pg_reload_conf();"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-primary-hba
+  namespace: postgres-primary
+data:
+  pg_hba.conf: |
+    # TYPE  DATABASE  USER  ADDRESS          METHOD
+    local   all       all                    trust
+    host    all       all   127.0.0.1/32     trust
+    host    all       all   ::1/128          trust
+
+    # Trusted LAN / gateway hosts — password-authenticated, not open trust
+    host    all       all   192.168.1.0/24   scram-sha-256
+    host    all       all   172.19.64.1/32   scram-sha-256
+
+    # Replication
+    local   replication  all                 trust
+    host    replication  all  127.0.0.1/32   trust
+    host    replication  all  ::1/128        trust
+
+    # Everything else: password required
+    host    all       all   all              scram-sha-256
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-standby-hba
+  namespace: postgres-standby
+data:
+  pg_hba.conf: |
+    # TYPE  DATABASE  USER  ADDRESS          METHOD
+    local   all       all                    trust
+    host    all       all   127.0.0.1/32     trust
+    host    all       all   ::1/128          trust
+
+    # Trusted LAN / gateway hosts — password-authenticated, not open trust
+    host    all       all   192.168.1.0/24   scram-sha-256
+    host    all       all   172.19.64.1/32   scram-sha-256
+
+    # Replication
+    local   replication  all                 trust
+    host    replication  all  127.0.0.1/32   trust
+    host    replication  all  ::1/128        trust
+
+    # Everything else: password required
+    host    all       all   all              scram-sha-256
+
+
+# 4. Extra app user + database, alongside the default "app"/"app" one.
+#    Created via docker-entrypoint-initdb.d, which Postgres only runs the
+#    *first* time it starts against an empty PGDATA — i.e. only on a brand
+#    new PVC. It won't touch postgres-primary-data/postgres-standby-data,
+#    which are already initialized. To add it to an already-running instance,
+#    run the equivalent SQL by hand once instead:
+#      kubectl exec -n postgres-primary postgres-primary-0 -- \
+#        psql -U app -d app -c \
+#        "CREATE USER yurick WITH PASSWORD '<EXTRA_PASSWORD>'; CREATE DATABASE yurick OWNER yurick;"
+#    (swap in the real EXTRA_PASSWORD value from the matching secret below,
+#    and the equivalent on postgres-standby-0 / postgres-standby-credentials)
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: postgres-primary-yurick-credentials
+  namespace: postgres-primary
+stringData:
+  EXTRA_DB: yurick
+  EXTRA_USER: yurick
+  EXTRA_PASSWORD: H6JTKqyq
+type: Opaque
+
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: postgres-standby-yurick-credentials
+  namespace: postgres-standby
+stringData:
+  EXTRA_DB: yurick
+  EXTRA_USER: yurick
+  EXTRA_PASSWORD: H6JTKqyq
+type: Opaque
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-primary-initdb
+  namespace: postgres-primary
+data:
+  01-create-extra-user-db.sh: |
+    #!/bin/bash
+    set -euo pipefail
+    psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<EOSQL
+    CREATE USER "$EXTRA_USER" WITH PASSWORD '$EXTRA_PASSWORD';
+    CREATE DATABASE "$EXTRA_DB" OWNER "$EXTRA_USER";
+    EOSQL
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-standby-initdb
+  namespace: postgres-standby
+data:
+  01-create-extra-user-db.sh: |
+    #!/bin/bash
+    set -euo pipefail
+    psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<EOSQL
+    CREATE USER "$EXTRA_USER" WITH PASSWORD '$EXTRA_PASSWORD';
+    CREATE DATABASE "$EXTRA_DB" OWNER "$EXTRA_USER";
+    EOSQL
+
+
+# 5. PVC — uses the cluster's default StorageClass (longhorn)
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -65,7 +188,20 @@ spec:
       storage: 10Gi
 
 
-# 4. Deployment
+# 6. Deployment
+#
+#    Each StatefulSet's initContainer apt-get installs postgresql-plpython3-17
+#    (+ its python3/libexpat deps) into a shared emptyDir, then the main
+#    container mounts just those specific files back at their original
+#    absolute paths — never a whole real system directory, so nothing already
+#    living in e.g. /usr/lib/postgresql/17/lib or the extension dir gets
+#    hidden. Verified against this exact image (postgres:17, Debian
+#    trixie/13, Python 3.13.5, postgresql-plpython3-17 17.11) by installing it
+#    in a scratch pod and confirming CREATE EXTENSION plpython3u loads and
+#    runs. If a postgres:17 image rebuild ever bumps the bundled Python minor
+#    version, the hardcoded "3.13" paths below need to move with it — check
+#    with `kubectl exec <pod> -c install-plpython3 -- python3 --version`
+#    (add a temporary `sleep infinity` to the args to keep it alive to check).
 ---
 apiVersion: apps/v1
 kind: StatefulSet
@@ -82,24 +218,114 @@ spec:
       labels:
         app: postgres-primary
     spec:
+      # Pins the pod to the same non-root "postgres" user (uid/gid 999) the
+      # official image already drops to internally via gosu — satisfies the
+      # "restricted" PodSecurity standard instead of starting as root.
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        runAsGroup: 999
+        fsGroup: 999
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+        - name: install-plpython3
+          image: postgres:17
+          # Needs root to apt-get install — overrides the pod-level uid 999
+          # pin above just for this container. Triggers the same "restricted"
+          # PodSecurity warning the main container used to hit; harmless here
+          # since it's advisory-only in this cluster (see securityContext
+          # comment on this pod above).
+          # No capabilities.drop here: apt-get needs CAP_SETUID/CAP_SETGID
+          # (root -> its own "_apt" sandbox user) to fetch packages, so
+          # dropping ALL breaks it — "Method http has died unexpectedly!".
+          securityContext:
+            runAsNonRoot: false
+            runAsUser: 0
+            runAsGroup: 0
+            allowPrivilegeEscalation: false
+          command: ["bash", "-c"]
+          args:
+            - |
+              set -euo pipefail
+              apt-get update -qq
+              apt-get install -y --no-install-recommends postgresql-plpython3-17
+              mkdir -p /pyext/pglib /pyext/ext /pyext/pylib /pyext/pyetc /pyext/rtlib
+              cp -a /usr/lib/postgresql/17/lib/plpython3.so /pyext/pglib/
+              cp -a /usr/share/postgresql/17/extension/plpython3u.control \
+                    /usr/share/postgresql/17/extension/plpython3u--1.0.sql /pyext/ext/
+              cp -a /usr/lib/python3.13/. /pyext/pylib/
+              cp -a /etc/python3.13/. /pyext/pyetc/
+              cp -a /usr/lib/x86_64-linux-gnu/libpython3.13.so* \
+                    /usr/lib/x86_64-linux-gnu/libexpat.so* /pyext/rtlib/
+          volumeMounts:
+            - name: pyext
+              mountPath: /pyext
       containers:
         - name: postgres
           image: postgres:17
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
           envFrom:
             - secretRef:
                 name: postgres-primary-credentials
+            - secretRef:
+                name: postgres-primary-yurick-credentials
           env:
             - name: PGDATA
               value: /var/lib/postgresql/data/pgdata
+            - name: LD_LIBRARY_PATH
+              value: /usr/local/lib/pgextra
+          args: ["-c", "hba_file=/etc/postgresql/custom/pg_hba.conf"]
           ports:
             - containerPort: 5432
           volumeMounts:
             - name: data
               mountPath: /var/lib/postgresql/data
+            - name: hba-config
+              mountPath: /etc/postgresql/custom
+              readOnly: true
+            - name: initdb
+              mountPath: /docker-entrypoint-initdb.d
+              readOnly: true
+            - name: pyext
+              mountPath: /usr/lib/postgresql/17/lib/plpython3.so
+              subPath: pglib/plpython3.so
+              readOnly: true
+            - name: pyext
+              mountPath: /usr/share/postgresql/17/extension/plpython3u.control
+              subPath: ext/plpython3u.control
+              readOnly: true
+            - name: pyext
+              mountPath: /usr/share/postgresql/17/extension/plpython3u--1.0.sql
+              subPath: ext/plpython3u--1.0.sql
+              readOnly: true
+            - name: pyext
+              mountPath: /usr/lib/python3.13
+              subPath: pylib
+              readOnly: true
+            - name: pyext
+              mountPath: /etc/python3.13
+              subPath: pyetc
+              readOnly: true
+            - name: pyext
+              mountPath: /usr/local/lib/pgextra
+              subPath: rtlib
+              readOnly: true
       volumes:
         - name: data
           persistentVolumeClaim:
             claimName: postgres-primary-data
+        - name: hba-config
+          configMap:
+            name: postgres-primary-hba
+        - name: initdb
+          configMap:
+            name: postgres-primary-initdb
+        - name: pyext
+          emptyDir: {}
 
 ---
 apiVersion: apps/v1
@@ -117,27 +343,109 @@ spec:
       labels:
         app: postgres-standby
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        runAsGroup: 999
+        fsGroup: 999
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+        - name: install-plpython3
+          image: postgres:17
+          # No capabilities.drop here: apt-get needs CAP_SETUID/CAP_SETGID
+          # (root -> its own "_apt" sandbox user) to fetch packages, so
+          # dropping ALL breaks it — "Method http has died unexpectedly!".
+          securityContext:
+            runAsNonRoot: false
+            runAsUser: 0
+            runAsGroup: 0
+            allowPrivilegeEscalation: false
+          command: ["bash", "-c"]
+          args:
+            - |
+              set -euo pipefail
+              apt-get update -qq
+              apt-get install -y --no-install-recommends postgresql-plpython3-17
+              mkdir -p /pyext/pglib /pyext/ext /pyext/pylib /pyext/pyetc /pyext/rtlib
+              cp -a /usr/lib/postgresql/17/lib/plpython3.so /pyext/pglib/
+              cp -a /usr/share/postgresql/17/extension/plpython3u.control \
+                    /usr/share/postgresql/17/extension/plpython3u--1.0.sql /pyext/ext/
+              cp -a /usr/lib/python3.13/. /pyext/pylib/
+              cp -a /etc/python3.13/. /pyext/pyetc/
+              cp -a /usr/lib/x86_64-linux-gnu/libpython3.13.so* \
+                    /usr/lib/x86_64-linux-gnu/libexpat.so* /pyext/rtlib/
+          volumeMounts:
+            - name: pyext
+              mountPath: /pyext
       containers:
         - name: postgres
           image: postgres:17
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
           envFrom:
             - secretRef:
                 name: postgres-standby-credentials
+            - secretRef:
+                name: postgres-standby-yurick-credentials
           env:
             - name: PGDATA
               value: /var/lib/postgresql/data/pgdata
+            - name: LD_LIBRARY_PATH
+              value: /usr/local/lib/pgextra
+          args: ["-c", "hba_file=/etc/postgresql/custom/pg_hba.conf"]
           ports:
             - containerPort: 5432
           volumeMounts:
             - name: data
               mountPath: /var/lib/postgresql/data
+            - name: hba-config
+              mountPath: /etc/postgresql/custom
+              readOnly: true
+            - name: initdb
+              mountPath: /docker-entrypoint-initdb.d
+              readOnly: true
+            - name: pyext
+              mountPath: /usr/lib/postgresql/17/lib/plpython3.so
+              subPath: pglib/plpython3.so
+              readOnly: true
+            - name: pyext
+              mountPath: /usr/share/postgresql/17/extension/plpython3u.control
+              subPath: ext/plpython3u.control
+              readOnly: true
+            - name: pyext
+              mountPath: /usr/share/postgresql/17/extension/plpython3u--1.0.sql
+              subPath: ext/plpython3u--1.0.sql
+              readOnly: true
+            - name: pyext
+              mountPath: /usr/lib/python3.13
+              subPath: pylib
+              readOnly: true
+            - name: pyext
+              mountPath: /etc/python3.13
+              subPath: pyetc
+              readOnly: true
+            - name: pyext
+              mountPath: /usr/local/lib/pgextra
+              subPath: rtlib
+              readOnly: true
       volumes:
         - name: data
           persistentVolumeClaim:
             claimName: postgres-standby-data
+        - name: hba-config
+          configMap:
+            name: postgres-standby-hba
+        - name: initdb
+          configMap:
+            name: postgres-standby-initdb
+        - name: pyext
+          emptyDir: {}
 
 
-# 5. Service (ClusterIP; swap type to LoadBalancer for an external IP from Cilium's pool)
+# 7. Service (ClusterIP; swap type to LoadBalancer for an external IP from Cilium's pool)
 ---
 apiVersion: v1
 kind: Service
