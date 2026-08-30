@@ -17,8 +17,8 @@ metadata:
 apiVersion: v1
 stringData:
   POSTGRES_DB: app
-  POSTGRES_PASSWORD: OFIwSFUrZEcvNTFoUC9TWg==
-  POSTGRES_USER: app
+  POSTGRES_PASSWORD: OFIwSFUrZE
+  POSTGRES_USER: yurick
 kind: Secret
 metadata:
   name: postgres-primary-credentials
@@ -29,8 +29,8 @@ type: Opaque
 apiVersion: v1
 stringData:
   POSTGRES_DB: app
-  POSTGRES_PASSWORD: dU5CelIwUlFmYlFFOTdHVw==
-  POSTGRES_USER: app
+  POSTGRES_PASSWORD: OFIwSFUrZE
+  POSTGRES_USER: yurick
 kind: Secret
 metadata:
   name: postgres-standby-credentials
@@ -42,7 +42,7 @@ type: Opaque
 #    Mounted as a directory (not subPath) so ConfigMap edits actually
 #    propagate into the pod; Postgres still needs a reload to pick them up:
 #      kubectl exec -n postgres-primary postgres-primary-0 -- \
-#        psql -U app -c "SELECT pg_reload_conf();"
+#        psql -U yurick -c "SELECT pg_reload_conf();"
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -94,73 +94,7 @@ data:
     host    all       all   all              scram-sha-256
 
 
-# 4. Extra app user + database, alongside the default "app"/"app" one.
-#    Created via docker-entrypoint-initdb.d, which Postgres only runs the
-#    *first* time it starts against an empty PGDATA — i.e. only on a brand
-#    new PVC. It won't touch postgres-primary-data/postgres-standby-data,
-#    which are already initialized. To add it to an already-running instance,
-#    run the equivalent SQL by hand once instead:
-#      kubectl exec -n postgres-primary postgres-primary-0 -- \
-#        psql -U app -d app -c \
-#        "CREATE USER yurick WITH PASSWORD '<EXTRA_PASSWORD>'; CREATE DATABASE yurick OWNER yurick;"
-#    (swap in the real EXTRA_PASSWORD value from the matching secret below,
-#    and the equivalent on postgres-standby-0 / postgres-standby-credentials)
----
-apiVersion: v1
-kind: Secret
-metadata:
-  name: postgres-primary-yurick-credentials
-  namespace: postgres-primary
-stringData:
-  EXTRA_DB: yurick
-  EXTRA_USER: yurick
-  EXTRA_PASSWORD: H6JTKqyq
-type: Opaque
-
----
-apiVersion: v1
-kind: Secret
-metadata:
-  name: postgres-standby-yurick-credentials
-  namespace: postgres-standby
-stringData:
-  EXTRA_DB: yurick
-  EXTRA_USER: yurick
-  EXTRA_PASSWORD: H6JTKqyq
-type: Opaque
-
----
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: postgres-primary-initdb
-  namespace: postgres-primary
-data:
-  01-create-extra-user-db.sh: |
-    #!/bin/bash
-    set -euo pipefail
-    psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<EOSQL
-    CREATE USER "$EXTRA_USER" WITH PASSWORD '$EXTRA_PASSWORD';
-    CREATE DATABASE "$EXTRA_DB" OWNER "$EXTRA_USER";
-    EOSQL
-
----
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: postgres-standby-initdb
-  namespace: postgres-standby
-data:
-  01-create-extra-user-db.sh: |
-    #!/bin/bash
-    set -euo pipefail
-    psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<EOSQL
-    CREATE USER "$EXTRA_USER" WITH PASSWORD '$EXTRA_PASSWORD';
-    CREATE DATABASE "$EXTRA_DB" OWNER "$EXTRA_USER";
-    EOSQL
-
-
-# 5. PVC — uses the cluster's default StorageClass (longhorn)
+# 4. PVC — uses the cluster's default StorageClass (longhorn)
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -188,7 +122,7 @@ spec:
       storage: 10Gi
 
 
-# 6. Deployment
+# 5. Deployment
 #
 #    Each StatefulSet's initContainer apt-get installs postgresql-plpython3-17
 #    (+ its python3/libexpat deps) into a shared emptyDir, then the main
@@ -271,8 +205,6 @@ spec:
           envFrom:
             - secretRef:
                 name: postgres-primary-credentials
-            - secretRef:
-                name: postgres-primary-yurick-credentials
           env:
             - name: PGDATA
               value: /var/lib/postgresql/data/pgdata
@@ -286,9 +218,6 @@ spec:
               mountPath: /var/lib/postgresql/data
             - name: hba-config
               mountPath: /etc/postgresql/custom
-              readOnly: true
-            - name: initdb
-              mountPath: /docker-entrypoint-initdb.d
               readOnly: true
             - name: pyext
               mountPath: /usr/lib/postgresql/17/lib/plpython3.so
@@ -321,9 +250,6 @@ spec:
         - name: hba-config
           configMap:
             name: postgres-primary-hba
-        - name: initdb
-          configMap:
-            name: postgres-primary-initdb
         - name: pyext
           emptyDir: {}
 
@@ -388,8 +314,6 @@ spec:
           envFrom:
             - secretRef:
                 name: postgres-standby-credentials
-            - secretRef:
-                name: postgres-standby-yurick-credentials
           env:
             - name: PGDATA
               value: /var/lib/postgresql/data/pgdata
@@ -403,9 +327,6 @@ spec:
               mountPath: /var/lib/postgresql/data
             - name: hba-config
               mountPath: /etc/postgresql/custom
-              readOnly: true
-            - name: initdb
-              mountPath: /docker-entrypoint-initdb.d
               readOnly: true
             - name: pyext
               mountPath: /usr/lib/postgresql/17/lib/plpython3.so
@@ -438,14 +359,11 @@ spec:
         - name: hba-config
           configMap:
             name: postgres-standby-hba
-        - name: initdb
-          configMap:
-            name: postgres-standby-initdb
         - name: pyext
           emptyDir: {}
 
 
-# 7. Service (ClusterIP; swap type to LoadBalancer for an external IP from Cilium's pool)
+# 6. Service (ClusterIP; swap type to LoadBalancer for an external IP from Cilium's pool)
 ---
 apiVersion: v1
 kind: Service
