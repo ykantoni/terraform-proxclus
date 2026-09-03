@@ -104,6 +104,18 @@ variable "longhorn_replica_count" {
   default     = 3
 }
 
+variable "enable_metrics_server" {
+  description = "Install metrics-server, so kubectl top and the HorizontalPodAutoscaler have resource metrics to read. Unlike enable_longhorn, this touches no machine configuration and needs no reboot, so it defaults on."
+  type        = bool
+  default     = true
+}
+
+variable "metrics_server_version" {
+  description = "metrics-server Helm chart version"
+  type        = string
+  default     = "3.14.0"
+}
+
 variable "nvidia_device_plugin_version" {
   description = "nvidia-device-plugin Helm chart version. Only installed when at least one node in var.nodes sets pcigpu; see modules/addons/nvidia-device-plugin."
   type        = string

@@ -124,29 +124,62 @@ spec:
 
 # 5. Deployment
 #
-#    Each StatefulSet has two apt-get initContainers that stage extension
-#    files into a shared emptyDir, then the main container mounts just those
-#    specific files back at their original absolute paths — never a whole
-#    real system directory, so nothing already living in e.g.
-#    /usr/lib/postgresql/17/lib or the extension dir gets hidden:
-#      - install-plpython3 installs postgresql-plpython3-17 (+ its
-#        python3/libexpat deps). Verified against this exact image
-#        (postgres:17, Debian trixie/13, Python 3.13.5,
-#        postgresql-plpython3-17 17.11) by installing it in a scratch pod and
-#        confirming CREATE EXTENSION plpython3u loads and runs. If a
-#        postgres:17 image rebuild ever bumps the bundled Python minor
-#        version, the hardcoded "3.13" paths below need to move with it —
-#        check with `kubectl exec <pod> -c install-plpython3 -- python3
-#        --version` (add a temporary `sleep infinity` to the args to keep it
-#        alive to check).
-#      - install-pldbgapi installs postgresql-17-pldebugger (the pldbgapi
-#        extension, used by debugger clients like pgAdmin to step through
-#        plpgsql functions). No extra runtime libs needed — its only
-#        dependency, libc6, is already in the image. The postgres container
-#        also sets shared_preload_libraries=plugin_debugger (see its args
+#    Each StatefulSet's install-extensions initContainer apt-get installs
+#    three extensions into a shared emptyDir, then the main container mounts
+#    that staged content back over the real /usr/lib/postgresql/17/lib and
+#    /usr/share/postgresql/17/extension directories:
+#      - postgresql-plpython3-17 (+ its python3/libexpat deps, staged
+#        separately since they don't belong under those two directories).
+#        Verified against this exact image (postgres:17, Debian trixie/13,
+#        Python 3.13.5, postgresql-plpython3-17 17.11) by installing it in a
+#        scratch pod and confirming CREATE EXTENSION plpython3u loads and
+#        runs. If a postgres:17 image rebuild ever bumps the bundled Python
+#        minor version, the hardcoded "3.13" paths below need to move with
+#        it — check with `kubectl exec <pod> -c install-extensions --
+#        python3 --version` (add a temporary `sleep infinity` to the args to
+#        keep it alive to check).
+#      - postgresql-17-pldebugger (the pldbgapi extension, used by debugger
+#        clients like pgAdmin to step through plpgsql functions). No extra
+#        runtime libs needed — its only dependency, libc6, is already in the
+#        image. The postgres container also sets
+#        shared_preload_libraries=citus,plugin_debugger (see its args
 #        below), which is required for indirect/global debugging (pgAdmin's
 #        "Debug" button waiting on any session) — plain CREATE EXTENSION
 #        pldbgapi alone only covers direct debugging.
+#      - postgresql-17-citus-14.2 (sharding/distributed tables), pulled from
+#        Citus's own apt repo (not in Debian/pgdg) via
+#        install.citusdata.com/community/deb.sh — confirmed that script
+#        supports this image's Debian trixie base. Citus ships ~90 files
+#        (dozens of extension-upgrade .sql files plus citus.so,
+#        citus_columnar.so, citus_pgoutput.so, citus_wal2json.so, and a
+#        citus_decoders/ subdirectory), which is why this mounts the whole
+#        lib/ and extension/ directories instead of naming files
+#        individually the way earlier revisions of this manifest did —
+#        nothing from the original image is hidden by that since the
+#        initContainer copies each directory's *complete* post-install
+#        contents (built-ins included), not just the new files.
+#        shared_preload_libraries=citus is mandatory (not optional like
+#        plugin_debugger) for Citus to load at all, and Citus's own docs say
+#        to list it first when combined with other preloaded libraries.
+#        citus.so also dynamically links libcurl.so.4 (plus libcurl's own
+#        chain: libnghttp2, libnghttp3, libpsl, librtmp, libssh2,
+#        libbrotlidec, libbrotlicommon) — none of which ship in the base
+#        postgres:17 image, unlike the rest of libcurl's deps (libpq,
+#        libssl, libcrypto, libgssapi_krb5, libldap, libsasl2, libgnutls,
+#        libz, ...), which are already there for psql's own TLS/Kerberos/
+#        LDAP support. Those 8 libs get staged into rtlib alongside the
+#        Python runtime libs. First cut of this shipped without them (an
+#        earlier scratch-pod check accidentally had libcurl already
+#        installed for an unrelated reason — fetching the Citus repo script
+#        — which masked the gap) and crash-looped with "could not load
+#        library... libcurl.so.4: cannot open shared object file". Re-
+#        verified faithfully this time: after installing everything, every
+#        library apt pulled in that wasn't already in the base image was
+#        deleted except the 8 above, then a real initdb + postgres start
+#        with shared_preload_libraries=citus,plugin_debugger and only
+#        LD_LIBRARY_PATH=/usr/local/lib/pgextra to resolve them — confirmed
+#        CREATE EXTENSION citus / plpython3u / pldbgapi all succeed and
+#        SELECT citus_version() returns "Citus 14.2.0".
 ---
 apiVersion: apps/v1
 kind: StatefulSet
@@ -171,10 +204,18 @@ spec:
         runAsUser: 999
         runAsGroup: 999
         fsGroup: 999
+        # Default fsGroupChangePolicy ("Always") recursively chmod g+rwX's
+        # every file on the PVC on every mount/pod (re)start, which widens
+        # server.key (needed if SSL is ever turned on) from 0600 to 0660 —
+        # Postgres then refuses to start with "private key file... has group
+        # or world access". OnRootMismatch skips that walk once the volume
+        # root already has the right group, so a manually-fixed 0600 key
+        # actually stays fixed across restarts.
+        fsGroupChangePolicy: OnRootMismatch
         seccompProfile:
           type: RuntimeDefault
       initContainers:
-        - name: install-plpython3
+        - name: install-extensions
           image: postgres:17
           # Needs root to apt-get install — overrides the pod-level uid 999
           # pin above just for this container. Triggers the same "restricted"
@@ -194,41 +235,34 @@ spec:
             - |
               set -euo pipefail
               apt-get update -qq
-              apt-get install -y --no-install-recommends postgresql-plpython3-17
+              apt-get install -y --no-install-recommends \
+                curl ca-certificates gnupg lsb-release apt-transport-https \
+                postgresql-plpython3-17 postgresql-17-pldebugger
+              curl -sL https://install.citusdata.com/community/deb.sh | bash
+              apt-get update -qq
+              apt-get install -y --no-install-recommends postgresql-17-citus-14.2
               mkdir -p /pyext/pglib /pyext/ext /pyext/pylib /pyext/pyetc /pyext/rtlib
-              cp -a /usr/lib/postgresql/17/lib/plpython3.so /pyext/pglib/
-              cp -a /usr/share/postgresql/17/extension/plpython3u.control \
-                    /usr/share/postgresql/17/extension/plpython3u--1.0.sql /pyext/ext/
+              cp -a /usr/lib/postgresql/17/lib/. /pyext/pglib/
+              cp -a /usr/share/postgresql/17/extension/. /pyext/ext/
               cp -a /usr/lib/python3.13/. /pyext/pylib/
               cp -a /etc/python3.13/. /pyext/pyetc/
               cp -a /usr/lib/x86_64-linux-gnu/libpython3.13.so* \
                     /usr/lib/x86_64-linux-gnu/libexpat.so* /pyext/rtlib/
-          volumeMounts:
-            - name: pyext
-              mountPath: /pyext
-        - name: install-pldbgapi
-          image: postgres:17
-          # Same apt-get-as-root story as install-plpython3 above. No extra
-          # runtime libs to stage here — pldebugger's only dependency is
-          # libc6, already present in the image.
-          securityContext:
-            runAsNonRoot: false
-            runAsUser: 0
-            runAsGroup: 0
-            allowPrivilegeEscalation: false
-          command: ["bash", "-c"]
-          args:
-            - |
-              set -euo pipefail
-              apt-get update -qq
-              apt-get install -y --no-install-recommends postgresql-17-pldebugger
-              mkdir -p /pyext/dbglib /pyext/dbgext
-              cp -a /usr/lib/postgresql/17/lib/plugin_debugger.so /pyext/dbglib/
-              cp -a /usr/share/postgresql/17/extension/pldbgapi.control \
-                    /usr/share/postgresql/17/extension/pldbgapi--1.1.sql \
-                    /usr/share/postgresql/17/extension/pldbgapi--1.0--1.1.sql \
-                    /usr/share/postgresql/17/extension/pldbgapi--unpackaged--1.1.sql \
-                    /pyext/dbgext/
+              # citus.so needs libcurl at runtime (and libcurl's own chain of
+              # deps not already in the base image); the rest of libcurl's
+              # ldd output — libpq, libssl, libcrypto, libgssapi_krb5,
+              # libldap, libsasl2, libgnutls, libz, etc. — is already present
+              # in postgres:17 (psql itself needs TLS/Kerberos/LDAP support),
+              # confirmed by diffing base-image libs against libs added by
+              # this install in a scratch pod.
+              cp -a /usr/lib/x86_64-linux-gnu/libcurl.so* \
+                    /usr/lib/x86_64-linux-gnu/libnghttp2.so* \
+                    /usr/lib/x86_64-linux-gnu/libnghttp3.so* \
+                    /usr/lib/x86_64-linux-gnu/libpsl.so* \
+                    /usr/lib/x86_64-linux-gnu/librtmp.so* \
+                    /usr/lib/x86_64-linux-gnu/libssh2.so* \
+                    /usr/lib/x86_64-linux-gnu/libbrotlidec.so* \
+                    /usr/lib/x86_64-linux-gnu/libbrotlicommon.so* /pyext/rtlib/
           volumeMounts:
             - name: pyext
               mountPath: /pyext
@@ -247,13 +281,15 @@ spec:
               value: /var/lib/postgresql/data/pgdata
             - name: LD_LIBRARY_PATH
               value: /usr/local/lib/pgextra
-          # shared_preload_libraries enables indirect/global pldbgapi
-          # debugging (pgAdmin's "Debug" button waiting on any session,
-          # not just one launched through the debugger) — plugin_debugger.so
-          # must already be in place at postmaster startup, which it is
-          # since the install-pldbgapi initContainer mounts it before this
-          # container starts.
-          args: ["-c", "hba_file=/etc/postgresql/custom/pg_hba.conf", "-c", "shared_preload_libraries=plugin_debugger"]
+          # shared_preload_libraries: citus is mandatory for Citus to load at
+          # all (and must come first per Citus's own docs when combined with
+          # other preloaded libraries); plugin_debugger enables indirect/
+          # global pldbgapi debugging (pgAdmin's "Debug" button waiting on
+          # any session, not just one launched through the debugger). Both
+          # .so files must already be in place at postmaster startup, which
+          # they are since the install-extensions initContainer mounts them
+          # before this container starts.
+          args: ["-c", "hba_file=/etc/postgresql/custom/pg_hba.conf", "-c", "shared_preload_libraries=citus,plugin_debugger"]
           ports:
             - containerPort: 5432
           volumeMounts:
@@ -263,16 +299,12 @@ spec:
               mountPath: /etc/postgresql/custom
               readOnly: true
             - name: pyext
-              mountPath: /usr/lib/postgresql/17/lib/plpython3.so
-              subPath: pglib/plpython3.so
+              mountPath: /usr/lib/postgresql/17/lib
+              subPath: pglib
               readOnly: true
             - name: pyext
-              mountPath: /usr/share/postgresql/17/extension/plpython3u.control
-              subPath: ext/plpython3u.control
-              readOnly: true
-            - name: pyext
-              mountPath: /usr/share/postgresql/17/extension/plpython3u--1.0.sql
-              subPath: ext/plpython3u--1.0.sql
+              mountPath: /usr/share/postgresql/17/extension
+              subPath: ext
               readOnly: true
             - name: pyext
               mountPath: /usr/lib/python3.13
@@ -285,26 +317,6 @@ spec:
             - name: pyext
               mountPath: /usr/local/lib/pgextra
               subPath: rtlib
-              readOnly: true
-            - name: pyext
-              mountPath: /usr/lib/postgresql/17/lib/plugin_debugger.so
-              subPath: dbglib/plugin_debugger.so
-              readOnly: true
-            - name: pyext
-              mountPath: /usr/share/postgresql/17/extension/pldbgapi.control
-              subPath: dbgext/pldbgapi.control
-              readOnly: true
-            - name: pyext
-              mountPath: /usr/share/postgresql/17/extension/pldbgapi--1.1.sql
-              subPath: dbgext/pldbgapi--1.1.sql
-              readOnly: true
-            - name: pyext
-              mountPath: /usr/share/postgresql/17/extension/pldbgapi--1.0--1.1.sql
-              subPath: dbgext/pldbgapi--1.0--1.1.sql
-              readOnly: true
-            - name: pyext
-              mountPath: /usr/share/postgresql/17/extension/pldbgapi--unpackaged--1.1.sql
-              subPath: dbgext/pldbgapi--unpackaged--1.1.sql
               readOnly: true
       volumes:
         - name: data
@@ -337,10 +349,14 @@ spec:
         runAsUser: 999
         runAsGroup: 999
         fsGroup: 999
+        # See matching comment on postgres-primary above: OnRootMismatch
+        # keeps a 0600 server.key from being widened back to 0660 by
+        # Kubernetes' recursive fsGroup chmod on every pod (re)start.
+        fsGroupChangePolicy: OnRootMismatch
         seccompProfile:
           type: RuntimeDefault
       initContainers:
-        - name: install-plpython3
+        - name: install-extensions
           image: postgres:17
           # No capabilities.drop here: apt-get needs CAP_SETUID/CAP_SETGID
           # (root -> its own "_apt" sandbox user) to fetch packages, so
@@ -355,41 +371,34 @@ spec:
             - |
               set -euo pipefail
               apt-get update -qq
-              apt-get install -y --no-install-recommends postgresql-plpython3-17
+              apt-get install -y --no-install-recommends \
+                curl ca-certificates gnupg lsb-release apt-transport-https \
+                postgresql-plpython3-17 postgresql-17-pldebugger
+              curl -sL https://install.citusdata.com/community/deb.sh | bash
+              apt-get update -qq
+              apt-get install -y --no-install-recommends postgresql-17-citus-14.2
               mkdir -p /pyext/pglib /pyext/ext /pyext/pylib /pyext/pyetc /pyext/rtlib
-              cp -a /usr/lib/postgresql/17/lib/plpython3.so /pyext/pglib/
-              cp -a /usr/share/postgresql/17/extension/plpython3u.control \
-                    /usr/share/postgresql/17/extension/plpython3u--1.0.sql /pyext/ext/
+              cp -a /usr/lib/postgresql/17/lib/. /pyext/pglib/
+              cp -a /usr/share/postgresql/17/extension/. /pyext/ext/
               cp -a /usr/lib/python3.13/. /pyext/pylib/
               cp -a /etc/python3.13/. /pyext/pyetc/
               cp -a /usr/lib/x86_64-linux-gnu/libpython3.13.so* \
                     /usr/lib/x86_64-linux-gnu/libexpat.so* /pyext/rtlib/
-          volumeMounts:
-            - name: pyext
-              mountPath: /pyext
-        - name: install-pldbgapi
-          image: postgres:17
-          # Same apt-get-as-root story as install-plpython3 above. No extra
-          # runtime libs to stage here — pldebugger's only dependency is
-          # libc6, already present in the image.
-          securityContext:
-            runAsNonRoot: false
-            runAsUser: 0
-            runAsGroup: 0
-            allowPrivilegeEscalation: false
-          command: ["bash", "-c"]
-          args:
-            - |
-              set -euo pipefail
-              apt-get update -qq
-              apt-get install -y --no-install-recommends postgresql-17-pldebugger
-              mkdir -p /pyext/dbglib /pyext/dbgext
-              cp -a /usr/lib/postgresql/17/lib/plugin_debugger.so /pyext/dbglib/
-              cp -a /usr/share/postgresql/17/extension/pldbgapi.control \
-                    /usr/share/postgresql/17/extension/pldbgapi--1.1.sql \
-                    /usr/share/postgresql/17/extension/pldbgapi--1.0--1.1.sql \
-                    /usr/share/postgresql/17/extension/pldbgapi--unpackaged--1.1.sql \
-                    /pyext/dbgext/
+              # citus.so needs libcurl at runtime (and libcurl's own chain of
+              # deps not already in the base image); the rest of libcurl's
+              # ldd output — libpq, libssl, libcrypto, libgssapi_krb5,
+              # libldap, libsasl2, libgnutls, libz, etc. — is already present
+              # in postgres:17 (psql itself needs TLS/Kerberos/LDAP support),
+              # confirmed by diffing base-image libs against libs added by
+              # this install in a scratch pod.
+              cp -a /usr/lib/x86_64-linux-gnu/libcurl.so* \
+                    /usr/lib/x86_64-linux-gnu/libnghttp2.so* \
+                    /usr/lib/x86_64-linux-gnu/libnghttp3.so* \
+                    /usr/lib/x86_64-linux-gnu/libpsl.so* \
+                    /usr/lib/x86_64-linux-gnu/librtmp.so* \
+                    /usr/lib/x86_64-linux-gnu/libssh2.so* \
+                    /usr/lib/x86_64-linux-gnu/libbrotlidec.so* \
+                    /usr/lib/x86_64-linux-gnu/libbrotlicommon.so* /pyext/rtlib/
           volumeMounts:
             - name: pyext
               mountPath: /pyext
@@ -408,13 +417,15 @@ spec:
               value: /var/lib/postgresql/data/pgdata
             - name: LD_LIBRARY_PATH
               value: /usr/local/lib/pgextra
-          # shared_preload_libraries enables indirect/global pldbgapi
-          # debugging (pgAdmin's "Debug" button waiting on any session,
-          # not just one launched through the debugger) — plugin_debugger.so
-          # must already be in place at postmaster startup, which it is
-          # since the install-pldbgapi initContainer mounts it before this
-          # container starts.
-          args: ["-c", "hba_file=/etc/postgresql/custom/pg_hba.conf", "-c", "shared_preload_libraries=plugin_debugger"]
+          # shared_preload_libraries: citus is mandatory for Citus to load at
+          # all (and must come first per Citus's own docs when combined with
+          # other preloaded libraries); plugin_debugger enables indirect/
+          # global pldbgapi debugging (pgAdmin's "Debug" button waiting on
+          # any session, not just one launched through the debugger). Both
+          # .so files must already be in place at postmaster startup, which
+          # they are since the install-extensions initContainer mounts them
+          # before this container starts.
+          args: ["-c", "hba_file=/etc/postgresql/custom/pg_hba.conf", "-c", "shared_preload_libraries=citus,plugin_debugger"]
           ports:
             - containerPort: 5432
           volumeMounts:
@@ -424,16 +435,12 @@ spec:
               mountPath: /etc/postgresql/custom
               readOnly: true
             - name: pyext
-              mountPath: /usr/lib/postgresql/17/lib/plpython3.so
-              subPath: pglib/plpython3.so
+              mountPath: /usr/lib/postgresql/17/lib
+              subPath: pglib
               readOnly: true
             - name: pyext
-              mountPath: /usr/share/postgresql/17/extension/plpython3u.control
-              subPath: ext/plpython3u.control
-              readOnly: true
-            - name: pyext
-              mountPath: /usr/share/postgresql/17/extension/plpython3u--1.0.sql
-              subPath: ext/plpython3u--1.0.sql
+              mountPath: /usr/share/postgresql/17/extension
+              subPath: ext
               readOnly: true
             - name: pyext
               mountPath: /usr/lib/python3.13
@@ -446,26 +453,6 @@ spec:
             - name: pyext
               mountPath: /usr/local/lib/pgextra
               subPath: rtlib
-              readOnly: true
-            - name: pyext
-              mountPath: /usr/lib/postgresql/17/lib/plugin_debugger.so
-              subPath: dbglib/plugin_debugger.so
-              readOnly: true
-            - name: pyext
-              mountPath: /usr/share/postgresql/17/extension/pldbgapi.control
-              subPath: dbgext/pldbgapi.control
-              readOnly: true
-            - name: pyext
-              mountPath: /usr/share/postgresql/17/extension/pldbgapi--1.1.sql
-              subPath: dbgext/pldbgapi--1.1.sql
-              readOnly: true
-            - name: pyext
-              mountPath: /usr/share/postgresql/17/extension/pldbgapi--1.0--1.1.sql
-              subPath: dbgext/pldbgapi--1.0--1.1.sql
-              readOnly: true
-            - name: pyext
-              mountPath: /usr/share/postgresql/17/extension/pldbgapi--unpackaged--1.1.sql
-              subPath: dbgext/pldbgapi--unpackaged--1.1.sql
               readOnly: true
       volumes:
         - name: data

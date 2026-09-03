@@ -54,6 +54,24 @@ module "longhorn" {
   ]
 }
 
+module "metrics_server" {
+  source = "./modules/addons/metrics-server"
+
+  count = var.enable_metrics_server ? 1 : 0
+
+  metrics_server_version = var.metrics_server_version
+
+  # Same reasoning as module.longhorn: needs pod networking up, which
+  # module.talos_cluster's own health check only guarantees when cni is
+  # flannel, so it also waits on module.cilium's helm_release when cni is
+  # cilium.
+  depends_on = [
+    module.talos_cluster,
+    module.cilium,
+    local_sensitive_file.kubeconfig,
+  ]
+}
+
 module "nvidia_device_plugin" {
   source = "./modules/addons/nvidia-device-plugin"
 

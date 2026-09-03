@@ -8,6 +8,8 @@ Talos Linux Kubernetes cluster on Proxmox VE.
 - `modules/talos-cluster` — Talos machine configuration and cluster bootstrap
 - `modules/addons/cilium` — Cilium and its LoadBalancer address pool
 - `modules/addons/longhorn` — Longhorn, the default CSI provider for dynamic PVs
+- `modules/addons/metrics-server` — metrics-server, for `kubectl top` and the
+  HorizontalPodAutoscaler
 - `modules/addons/nvidia-device-plugin` — NVIDIA device plugin, so a mapped GPU
   shows up as an `nvidia.com/gpu` resource
 - `addons.tf` — where addons are composed
@@ -100,6 +102,18 @@ which Longhorn's engine needs on the host, are already in
 worker count) tune the release; see `modules/addons/longhorn/README.md` for
 what else the module sets and why.
 
+## Metrics
+
+`enable_metrics_server = true` (the default) installs metrics-server, giving
+`kubectl top node`/`kubectl top pod` and the HorizontalPodAutoscaler resource
+metrics to read. Unlike `enable_longhorn`, it touches no machine
+configuration and needs no reboot to turn on or off.
+
+`metrics_server_version` tunes the chart version; see
+`modules/addons/metrics-server/README.md` for the Talos-specific flags it
+sets (`--kubelet-insecure-tls` and `--kubelet-preferred-address-types`) and
+why they're needed.
+
 ## GPU
 
 Setting `pcigpu` on a node in `var.nodes` passes that PCI device through to
@@ -135,7 +149,7 @@ cluster uses two independent gates, both in `modules/talos-cluster`:
   once per cluster lifetime (a fresh build after `terraform destroy`
   re-triggers it) and needs `curl` on the machine running `terraform apply`.
 
-Cilium, Longhorn, and the NVIDIA device plugin all depend on `module.talos_cluster` as a whole, which is
+Cilium, Longhorn, metrics-server, and the NVIDIA device plugin all depend on `module.talos_cluster` as a whole, which is
 enough: a module-level `depends_on` waits on every resource inside that
 module, `terraform_data.wait_for_api` included, with no extra wiring needed
 in `addons.tf`.
