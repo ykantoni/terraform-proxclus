@@ -175,6 +175,16 @@ troubleshooting-agents/
 - **A different backing model**: `OLLAMA_MODEL`/`OLLAMA_BASE_URL` in `.env`
   — nothing else references either.
 
+## Measuring quality
+
+`backend/evals/` is a 20-scenario eval harness: each scenario invokes the
+real agent/LLM directly with the tool-*execution* layer mocked out (canned
+`kubectl`/`talosctl`/SSH/HTTP output), and scores whether the right tool got
+called and the right fact ended up in the answer. Run
+`python backend/evals/harness.py` for a scorecard (`X/20 passed`, plus
+tool-selection/fact/false-alarm rates); see `backend/evals/README.md` for
+how to read a failure and add new cases.
+
 ## Troubleshooting the troubleshooter
 
 - **`GET /api/health` fails to reach the model** — confirm

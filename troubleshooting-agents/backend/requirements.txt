@@ -7,3 +7,6 @@ pydantic~=2.9
 PyYAML~=6.0
 python-dotenv~=1.0
 requests~=2.32
+
+# Only needed for evals/ (backend/evals/README.md)
+pytest~=8.3
