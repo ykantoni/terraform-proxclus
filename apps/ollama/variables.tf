@@ -72,6 +72,12 @@ variable "ollama_storage_path" {
   default     = "/var/lib/ollama-models"
 }
 
+variable "ollama_service_type" {
+  description = "Kubernetes Service type Ollama's own API (port 11434) is exposed as. LoadBalancer (the default) gets an address from Cilium's load_balancer_ip_range, since this cluster runs no ingress controller; see the root README's \"Networking\" section. Open WebUI reaches Ollama via ClusterIP DNS regardless of this setting (see local.ollama_service_fqdn), so this only matters for clients outside the cluster hitting Ollama's API directly."
+  type        = string
+  default     = "LoadBalancer"
+}
+
 variable "ollama_extra_values" {
   description = "Extra ollama-helm Helm values merged over the defaults"
   type        = any

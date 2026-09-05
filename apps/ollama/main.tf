@@ -94,6 +94,11 @@ locals {
         }
       }
 
+      service = {
+        type = var.ollama_service_type
+        port = 11434
+      }
+
       persistentVolume = {
         enabled      = true
         size         = var.ollama_storage_size
