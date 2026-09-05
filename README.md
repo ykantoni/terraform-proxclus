@@ -18,6 +18,9 @@ Talos Linux Kubernetes cluster on Proxmox VE.
   independent Terraform root (own state, own providers, own lifecycle); see
   `apps/README.md` for the convention and `apps/postgres` for the reference
   example
+- `troubleshooting-agents/` — LangGraph troubleshooting agents (Talos,
+  Ollama, NVIDIA GPU, Proxmox host) with a small React GUI, independent of
+  Terraform entirely; see `troubleshooting-agents/README.md`
 
 ## Adding an addon
 
