@@ -175,6 +175,12 @@ troubleshooting-agents/
 - **A different backing model**: `OLLAMA_MODEL`/`OLLAMA_BASE_URL` in `.env`
   — nothing else references either.
 
+A Headlamp Desktop plugin lives in [headlamp-plugin/](headlamp-plugin/):
+sidebar **Cluster Chat**, a gather-then-ask snapshot, then the same
+`gemma4:26b` on `192.168.1.63:11434`. It is Kubernetes-only (no
+`talosctl`/SSH). See that folder’s README to run `npm start` against
+Headlamp Desktop.
+
 ## Measuring quality
 
 `backend/evals/` is a 20-scenario eval harness: each scenario invokes the
