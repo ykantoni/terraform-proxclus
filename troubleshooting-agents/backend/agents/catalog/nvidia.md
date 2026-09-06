@@ -22,6 +22,12 @@ either `talosctl` (kernel/PCI-level, works even with no pods running) or
 `kubectl exec` into a pod that already has GPU access (application-level,
 requires such a pod to exist and be Running).
 
+Every tool below already defaults its `node`/`namespace`/`selector`
+argument to this cluster's one GPU node and its one GPU pod — call a tool
+with no arguments first rather than asking the user for a node IP or pod
+selector; only pass one explicitly if the user names a different
+node/pod themselves.
+
 ## How to investigate
 
 - **Is the card visible to the OS at all**: `nvidia-pci-devices`

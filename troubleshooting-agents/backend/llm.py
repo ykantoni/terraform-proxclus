@@ -16,6 +16,10 @@ def build_llm() -> ChatOllama:
         model=settings.ollama_model,
         temperature=settings.ollama_temperature,
         keep_alive=settings.ollama_keep_alive,
+        # Hard cap on output length — the backstop against a runaway/
+        # repeating generation that never hits a natural stop token. See
+        # OLLAMA_NUM_PREDICT's comment in config.py for why this exists.
+        num_predict=settings.ollama_num_predict,
         # This model measures slow on this repo's own server (a bare 2-token
         # reply took ~58s) — a generous client timeout matters more than it
         # would for a typical hosted model. See OLLAMA_REQUEST_TIMEOUT.

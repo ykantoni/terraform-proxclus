@@ -40,6 +40,8 @@ class CaseResult:
     forbidden_clean: bool
     error: str | None = None
     seconds: float = 0.0
+    started_at: str = ""
+    finished_at: str = ""
 
     @property
     def passed(self) -> bool:

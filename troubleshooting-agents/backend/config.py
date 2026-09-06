@@ -48,6 +48,18 @@ class Settings:
     # multi-turn troubleshooting conversation doesn't eat the ~20s prompt-eval
     # cold-start cost between every turn.
     ollama_keep_alive: str = field(default_factory=lambda: _env("OLLAMA_KEEP_ALIVE", "30m"))
+    # Hard ceiling on a single reply's output tokens. temperature=0 (greedy
+    # decoding) isn't perfectly reproducible on this GPU backend and can
+    # occasionally lock onto a repeating pattern with no natural stop token —
+    # observed in practice: a run that generated 68k+ tokens and was still
+    # climbing after 25 minutes, on the exact same prompt that finished
+    # cleanly in under 2 minutes moments before. Without this, the only
+    # thing that stops a runaway generation is the model's full context
+    # window (196608 tokens here — the better part of an hour at this
+    # server's ~40 tok/s). 2048 is generous headroom for a real answer
+    # (the longest observed final answer was well under 1000 tokens) while
+    # bounding the worst case to under a minute.
+    ollama_num_predict: int = field(default_factory=lambda: int(_env("OLLAMA_NUM_PREDICT", "2048")))
 
     # --- Talos / Kubernetes ---
     talos_vip: str = field(default_factory=lambda: _env("TALOS_VIP", "192.168.1.99"))

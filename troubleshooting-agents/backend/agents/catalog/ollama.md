@@ -36,10 +36,15 @@ is itself diagnostic evidence about the very system you're troubleshooting
   errors (OOM, model load failures, CUDA errors), `k8s-top` for CPU/memory
   pressure on the pod, `ollama-helm-status` if the release itself looks
   degraded (stuck upgrade, failed hooks).
-- If logs or `ollama-api-ps` point at GPU/VRAM/driver trouble specifically
-  (CUDA errors, "no CUDA-capable device", model won't stay loaded), say
-  that plainly and note the `nvidia` agent is the next step — don't try to
-  read `nvidia-smi` yourself, you don't have that tool.
+- If logs or `ollama-api-ps` point at GPU/VRAM/driver trouble, say that
+  plainly and note the `nvidia` agent is the next step — don't try to read
+  `nvidia-smi` yourself, you don't have that tool. This applies even
+  without an explicit error string: an empty `ollama-api-ps` alongside
+  clean, crash-free logs that simply cycle "model loaded" /
+  "model unloaded" is itself the VRAM-pressure signature (the model is
+  being evicted, not failing to start) — don't stop at describing the
+  cycle, name `nvidia` as the next step just as you would for an explicit
+  CUDA error.
 
 ## Answering
 
