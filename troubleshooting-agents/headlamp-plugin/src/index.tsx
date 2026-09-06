@@ -17,6 +17,12 @@ import { AskAboutSection } from './details/AskAboutSection';
 import Settings from './settings/Settings';
 import { PLUGIN_NAME } from './settings/types';
 
+// Cluster Chat is reachable two ways — a full-page sidebar route (good for
+// a bookmarked/direct link) and an app-bar side panel (good for asking
+// without leaving the current page, see AskAboutSection) — each mounting
+// its own independent <ChatPage/> with its own conversation. That's
+// intentional: they're for different moments, not meant to share state.
+
 registerSidebarEntry({
   parent: null,
   name: 'cluster-chat',

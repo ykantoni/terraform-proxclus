@@ -7,32 +7,17 @@ import LinearProgress from '@mui/material/LinearProgress';
 import Paper from '@mui/material/Paper';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { formatSnapshot, snapshotPreviewLines } from '../gather/format';
-import { gatherSnapshot, useGatherCluster } from '../gather/kube';
-import { spaceQuoteMarks } from './displayText';
-import { ClusterSnapshot, CurrentResourceRef } from '../gather/types';
-import { ChatMessage, ModelStatus, pingModel, streamChat } from '../ollama/client';
-import { TALOS_SYSTEM_PROMPT } from '../prompt/talos';
+import { useGatherCluster } from '../gather/kube';
+import { CurrentResourceRef } from '../gather/types';
 import { store } from '../settings/store';
 import { mergeSettings } from '../settings/types';
-
-type Phase = 'idle' | 'gathering' | 'waiting' | 'streaming';
-
-interface UiMessage {
-  id: string;
-  role: 'user' | 'assistant';
-  content: string;
-  error?: boolean;
-  pending?: boolean;
-  snapshot?: ClusterSnapshot;
-  elapsedSeconds?: number;
-}
-
-function uid(): string {
-  return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-}
+import { useAskTarget } from './askTarget';
+import { spaceQuoteMarks } from './displayText';
+import { useChatSession } from './useChatSession';
+import { useModelStatus } from './useModelStatus';
 
 function refFromSearch(search: string): CurrentResourceRef | undefined {
   const q = new URLSearchParams(search);
@@ -42,7 +27,7 @@ function refFromSearch(search: string): CurrentResourceRef | undefined {
   if (!kind || !name) {
     return undefined;
   }
-  return { kind, name, namespace: namespace || undefined };
+  return { kind, name, namespace };
 }
 
 export default function ChatPage() {
@@ -50,136 +35,35 @@ export default function ChatPage() {
   const cluster = useGatherCluster();
   const useConf = store.useConfig();
   const settings = mergeSettings(useConf() || undefined);
-  const [messages, setMessages] = useState<UiMessage[]>([]);
   const [input, setInput] = useState('');
-  const [busy, setBusy] = useState(false);
   const [includeSnapshot, setIncludeSnapshot] = useState(true);
-  const [phase, setPhase] = useState<Phase>('idle');
-  const [elapsed, setElapsed] = useState(0);
-  const [status, setStatus] = useState<ModelStatus | null>(null);
-  const [current, setCurrent] = useState<CurrentResourceRef | undefined>(() =>
-    refFromSearch(location.search)
-  );
+  const status = useModelStatus(settings);
+  // Set by AskAboutSection (a resource's details page) when the panel is
+  // opened in place; refFromSearch is the fallback for a direct/bookmarked
+  // link to the dedicated /cluster-chat page.
+  const current = useAskTarget() ?? refFromSearch(location.search);
+  const { messages, busy, phase, elapsed, send } = useChatSession({
+    cluster,
+    settings,
+    current,
+    includeSnapshot,
+  });
   const bottomRef = useRef<HTMLDivElement | null>(null);
-  const timerRef = useRef<number | null>(null);
-
-  useEffect(() => {
-    setCurrent(refFromSearch(location.search));
-  }, [location.search]);
-
-  useEffect(() => {
-    pingModel(settings).then(setStatus).catch(() => undefined);
-    // settings identity changes every render if we depend on the object
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [settings.baseUrl, settings.model, settings.transport]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, phase]);
 
-  useEffect(() => {
-    if (!busy) {
-      if (timerRef.current) {
-        window.clearInterval(timerRef.current);
-        timerRef.current = null;
-      }
-      return;
-    }
-    const t0 = Date.now();
-    timerRef.current = window.setInterval(() => {
-      setElapsed(Math.round((Date.now() - t0) / 1000));
-    }, 500);
-    return () => {
-      if (timerRef.current) {
-        window.clearInterval(timerRef.current);
-      }
-    };
-  }, [busy]);
-
-  const historyForModel = useMemo(() => {
-    const prose = messages
-      .filter(m => !m.error && m.content)
-      .slice(-6)
-      .map(m => ({ role: m.role, content: m.content }) as ChatMessage);
-    return prose;
-  }, [messages]);
-
-  const send = async (preset?: string) => {
-    const text = (preset ?? input).trim();
-    if (!text || busy) {
-      return;
-    }
-    const userMsg: UiMessage = { id: uid(), role: 'user', content: text };
-    const assistantId = uid();
-    const assistantMsg: UiMessage = {
-      id: assistantId,
-      role: 'assistant',
-      content: '',
-      pending: true,
-    };
-    setMessages(prev => [...prev, userMsg, assistantMsg]);
+  const onSend = (preset?: string) => {
+    const text = preset ?? input;
     setInput('');
-    setBusy(true);
-    setElapsed(0);
-    setPhase(includeSnapshot ? 'gathering' : 'waiting');
-
-    const patch = (fn: (m: UiMessage) => UiMessage) =>
-      setMessages(prev => prev.map(m => (m.id === assistantId ? fn(m) : m)));
-
-    try {
-      let snapshot: ClusterSnapshot | undefined;
-      if (includeSnapshot) {
-        snapshot = await gatherSnapshot(current, cluster);
-        patch(m => ({ ...m, snapshot }));
-      }
-
-      setPhase('waiting');
-      const payload: ChatMessage[] = [
-        { role: 'system', content: TALOS_SYSTEM_PROMPT },
-        ...historyForModel,
-        {
-          role: 'user',
-          content: snapshot
-            ? `${text}\n\n## Live cluster snapshot\n${formatSnapshot(snapshot)}`
-            : text,
-        },
-      ];
-
-      let sawToken = false;
-      const t0 = Date.now();
-      await streamChat({
-        settings,
-        messages: payload,
-        onToken: chunk => {
-          if (!sawToken) {
-            sawToken = true;
-            setPhase('streaming');
-          }
-          patch(m => ({ ...m, content: m.content + chunk }));
-        },
-      });
-      patch(m => ({
-        ...m,
-        pending: false,
-        elapsedSeconds: Math.round((Date.now() - t0) / 1000),
-      }));
-    } catch (err) {
-      patch(m => ({
-        ...m,
-        pending: false,
-        error: true,
-        content: `⚠️ ${err instanceof Error ? err.message : String(err)}`,
-      }));
-    } finally {
-      setBusy(false);
-      setPhase('idle');
-    }
+    void send(text);
   };
 
   const onKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      send();
+      onSend();
     }
   };
 
@@ -239,7 +123,13 @@ export default function ChatPage() {
               'Any CrashLoopBackOff or OOMKilled pods?',
               'talosctl health says ext-nvidia-persistenced is waiting — is that serious?',
             ].map(q => (
-              <Button key={q} size="small" variant="outlined" disabled={busy} onClick={() => send(q)}>
+              <Button
+                key={q}
+                size="small"
+                variant="outlined"
+                disabled={busy}
+                onClick={() => onSend(q)}
+              >
                 {q}
               </Button>
             ))}
@@ -298,7 +188,7 @@ export default function ChatPage() {
           disabled={busy}
           placeholder="Ask about node health, unhealthy pods, or this resource…"
         />
-        <Button variant="contained" onClick={() => send()} disabled={busy || !input.trim()}>
+        <Button variant="contained" onClick={() => onSend()} disabled={busy || !input.trim()}>
           {busy ? 'Thinking…' : 'Send'}
         </Button>
       </Box>
