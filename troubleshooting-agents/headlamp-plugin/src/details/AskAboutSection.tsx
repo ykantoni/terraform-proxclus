@@ -1,8 +1,7 @@
-import { Router } from '@kinvolk/headlamp-plugin/lib';
 import { SectionBox } from '@kinvolk/headlamp-plugin/lib/CommonComponents';
 import Button from '@mui/material/Button';
 import Typography from '@mui/material/Typography';
-import { useHistory } from 'react-router-dom';
+import { setAskTarget } from '../chat/askTarget';
 import { setChatPanelOpen } from '../chat/panelState';
 import { ASKABLE_KINDS } from './kinds';
 
@@ -12,7 +11,6 @@ interface ResourceLike {
 }
 
 export function AskAboutSection({ resource }: { resource?: ResourceLike }) {
-  const history = useHistory();
   if (!resource?.kind || !ASKABLE_KINDS.has(resource.kind) || !resource.metadata?.name) {
     return null;
   }
@@ -22,17 +20,12 @@ export function AskAboutSection({ resource }: { resource?: ResourceLike }) {
   const namespace = resource.metadata.namespace;
 
   const open = () => {
-    const params = new URLSearchParams({ kind, name });
-    if (namespace) {
-      params.set('namespace', namespace);
-    }
+    // Opens the side panel in place, rather than navigating the main
+    // content area to the dedicated /cluster-chat page — that would
+    // replace this details page instead of just adding the chat alongside
+    // it. ChatPage picks this up via useAskTarget().
+    setAskTarget({ kind, name, namespace });
     setChatPanelOpen(true);
-    try {
-      const url = Router.createRouteURL('cluster-chat');
-      history.push(`${url}?${params.toString()}`);
-    } catch {
-      // panel is already open
-    }
   };
 
   return (

@@ -31,6 +31,22 @@ function timeoutSignal(seconds: number, parent?: AbortSignal): AbortSignal {
   return extra;
 }
 
+/** Which transport(s) to try, in order. `auto` means "LAN first, kube
+ * service proxy as fallback" — see streamChat's doc comment for why. */
+function transportOrder(settings: PluginSettings): Array<'direct' | 'proxy'> {
+  if (settings.transport === 'proxy') {
+    return ['proxy'];
+  }
+  if (settings.transport === 'direct') {
+    return ['direct'];
+  }
+  return ['direct', 'proxy'];
+}
+
+function findModel(models: any[], name: string): any {
+  return models.find((m: any) => m.name === name || m.model === name);
+}
+
 function chatBody(settings: PluginSettings, messages: ChatMessage[], stream: boolean) {
   return {
     model: settings.model,
@@ -181,19 +197,21 @@ async function tryNonStream(
 /**
  * Stream one /api/chat turn. `auto` tries LAN first (CORS probe on 2026-09-06
  * showed Ollama reflecting Origin), then kube service proxy.
+ *
+ * For each transport in order: try a real stream first, and only if that
+ * fails (a proxy that buffers the whole response, a server that rejects
+ * `stream: true`, ...) fall back to one non-streaming request on the *same*
+ * transport before giving up on it and moving to the next. `lastErr` always
+ * holds the most recent failure, so if every transport is unreachable the
+ * error the caller sees is the last, most specific one — usually the more
+ * useful of the two forms for a given transport.
  */
 export async function streamChat(opts: StreamChatOptions): Promise<Transport> {
   const { settings, messages, onToken } = opts;
   const signal = timeoutSignal(settings.timeoutSeconds, opts.signal);
-  const order: Array<'direct' | 'proxy'> =
-    settings.transport === 'proxy'
-      ? ['proxy']
-      : settings.transport === 'direct'
-        ? ['direct']
-        : ['direct', 'proxy'];
 
   let lastErr: unknown;
-  for (const transport of order) {
+  for (const transport of transportOrder(settings)) {
     try {
       await tryStream(settings, transport, messages, onToken, signal);
       return transport;
@@ -211,26 +229,14 @@ export async function streamChat(opts: StreamChatOptions): Promise<Transport> {
 }
 
 export async function pingModel(settings: PluginSettings): Promise<ModelStatus> {
-  const order: Array<'direct' | 'proxy'> =
-    settings.transport === 'proxy'
-      ? ['proxy']
-      : settings.transport === 'direct'
-        ? ['direct']
-        : ['direct', 'proxy'];
-
   let lastErr: unknown;
-  for (const transport of order) {
+  for (const transport of transportOrder(settings)) {
     try {
-      if (transport === 'direct') {
-        const res = await directFetch(settings, '/api/ps', { method: 'GET' });
-        const json = await res.json();
-        const models = json?.models || [];
-        const hit = models.find((m: any) => m.name === settings.model || m.model === settings.model);
-        return { loaded: Boolean(hit), name: hit?.name || hit?.model, transport };
-      }
-      const json = await ApiProxy.request(proxyApiPath(settings, '/api/ps'));
-      const models = json?.models || [];
-      const hit = models.find((m: any) => m.name === settings.model || m.model === settings.model);
+      const json =
+        transport === 'direct'
+          ? await (await directFetch(settings, '/api/ps', { method: 'GET' })).json()
+          : await ApiProxy.request(proxyApiPath(settings, '/api/ps'));
+      const hit = findModel(json?.models || [], settings.model);
       return { loaded: Boolean(hit), name: hit?.name || hit?.model, transport };
     } catch (err) {
       lastErr = err;
