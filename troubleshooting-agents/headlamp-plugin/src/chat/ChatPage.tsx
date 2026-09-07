@@ -15,7 +15,7 @@ import { CurrentResourceRef } from '../gather/types';
 import { store } from '../settings/store';
 import { mergeSettings } from '../settings/types';
 import { useAskTarget } from './askTarget';
-import { spaceQuoteMarks } from './displayText';
+import { MarkdownMessage } from './MarkdownMessage';
 import { useChatSession } from './useChatSession';
 import { useModelStatus } from './useModelStatus';
 
@@ -144,12 +144,9 @@ export default function ChatPage() {
               {m.role}
               {m.pending ? ' · thinking' : ''}
             </Typography>
-            <Typography
-              component="pre"
-              sx={{ whiteSpace: 'pre-wrap', fontFamily: 'inherit', m: 0, mt: 0.5 }}
-            >
-              {m.content ? spaceQuoteMarks(m.content) : m.pending ? '…' : ''}
-            </Typography>
+            <Box sx={{ mt: 0.5 }}>
+              <MarkdownMessage content={m.content} placeholder={m.pending ? '…' : ''} />
+            </Box>
             {m.snapshot && (
               <details style={{ marginTop: 8 }}>
                 <summary>snapshot sent ({snapshotPreviewLines(m.snapshot).join(' · ')})</summary>
