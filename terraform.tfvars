@@ -13,6 +13,11 @@ cilium_version = "1.19.6"
 
 enable_longhorn = true
 
+# Prometheus/Alertmanager/Grafana PVCs default to the "longhorn" StorageClass,
+# so this depends on enable_longhorn = true above (order in this file doesn't
+# matter to Terraform, only that both are true).
+enable_prometheus = true
+
 # Off because cp1, worker2 and worker3 never reach Talos stage "running": the
 # NVIDIA extensions in the shared image wait forever for a GPU those nodes do
 # not have, so the "all nodes to finish boot sequence" check can never pass.

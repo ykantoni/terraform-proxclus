@@ -117,6 +117,25 @@ configuration and needs no reboot to turn on or off.
 sets (`--kubelet-insecure-tls` and `--kubelet-preferred-address-types`) and
 why they're needed.
 
+## Monitoring
+
+`enable_prometheus = true` (default `false`) installs
+[kube-prometheus-stack](https://github.com/prometheus-community/helm-charts/tree/main/charts/kube-prometheus-stack):
+Prometheus, Alertmanager, Grafana, node-exporter, and kube-state-metrics, with
+default alerting rules and Kubernetes dashboards. Its PVCs default to the
+`longhorn` StorageClass, so it also needs `enable_longhorn = true`; unlike
+Longhorn itself, turning it on touches no machine configuration and needs no
+reboot.
+
+`kube_prometheus_stack_version` tunes the chart version, and
+`grafana_admin_password` sets Grafana's login (defaults to the chart's own
+`"prom-operator"` — change it before relying on the default LoadBalancer
+exposure, which puts Grafana's login page on the LAN). See
+`modules/addons/prometheus/README.md` for the rest of the module's inputs, the
+privileged-namespace label node-exporter needs, and why
+`serviceMonitorSelectorNilUsesHelmValues` (and its `podMonitor`/`rule`
+equivalents) are turned off.
+
 ## GPU
 
 Setting `pcigpu` on a node in `var.nodes` passes that PCI device through to
@@ -152,10 +171,12 @@ cluster uses two independent gates, both in `modules/talos-cluster`:
   once per cluster lifetime (a fresh build after `terraform destroy`
   re-triggers it) and needs `curl` on the machine running `terraform apply`.
 
-Cilium, Longhorn, metrics-server, and the NVIDIA device plugin all depend on `module.talos_cluster` as a whole, which is
-enough: a module-level `depends_on` waits on every resource inside that
-module, `terraform_data.wait_for_api` included, with no extra wiring needed
-in `addons.tf`.
+Cilium, Longhorn, metrics-server, Prometheus, and the NVIDIA device plugin all
+depend on `module.talos_cluster` as a whole, which is enough: a module-level
+`depends_on` waits on every resource inside that module,
+`terraform_data.wait_for_api` included, with no extra wiring needed in
+`addons.tf`. Prometheus additionally depends on `module.longhorn` directly,
+since its PVCs need Longhorn's CSI controller actually running to provision.
 
 The Kubernetes-level checks stay enabled deliberately, because they are the only
 ones that prove the API server answers requests. Talos skips the two that cannot

@@ -72,6 +72,27 @@ module "metrics_server" {
   ]
 }
 
+module "prometheus" {
+  source = "./modules/addons/prometheus"
+
+  count = var.enable_prometheus ? 1 : 0
+
+  kube_prometheus_stack_version = var.kube_prometheus_stack_version
+  grafana_admin_password        = var.grafana_admin_password
+
+  # Same CNI reasoning as module.longhorn and module.metrics_server. Also
+  # waits on module.longhorn directly: this module's PVCs (storage_class
+  # defaults to "longhorn") need Longhorn's CSI controller actually running
+  # to provision, not just its own helm_release having eventually turned
+  # Ready under this module's separate wait=true.
+  depends_on = [
+    module.talos_cluster,
+    module.cilium,
+    module.longhorn,
+    local_sensitive_file.kubeconfig,
+  ]
+}
+
 module "nvidia_device_plugin" {
   source = "./modules/addons/nvidia-device-plugin"
 

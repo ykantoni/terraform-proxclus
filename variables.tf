@@ -116,6 +116,25 @@ variable "metrics_server_version" {
   default     = "3.14.0"
 }
 
+variable "enable_prometheus" {
+  description = "Install kube-prometheus-stack (Prometheus, Grafana, Alertmanager, node-exporter, kube-state-metrics) for cluster monitoring. Its PVCs default to the \"longhorn\" StorageClass (see modules/addons/prometheus's storage_class default), so this needs enable_longhorn = true too. Touches no machine configuration and needs no reboot on its own."
+  type        = bool
+  default     = false
+}
+
+variable "kube_prometheus_stack_version" {
+  description = "kube-prometheus-stack Helm chart version"
+  type        = string
+  default     = "90.0.0"
+}
+
+variable "grafana_admin_password" {
+  description = "Grafana admin login password. Defaults to the chart's own default (\"prom-operator\"); override before relying on enable_prometheus's default LoadBalancer exposure, which puts Grafana's login page on the LAN."
+  type        = string
+  default     = "prom-operator"
+  sensitive   = true
+}
+
 variable "nvidia_device_plugin_version" {
   description = "nvidia-device-plugin Helm chart version. Only installed when at least one node in var.nodes sets pcigpu; see modules/addons/nvidia-device-plugin."
   type        = string
