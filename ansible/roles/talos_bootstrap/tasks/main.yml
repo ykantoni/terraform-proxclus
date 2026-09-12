@@ -1,0 +1,51 @@
+---
+# Orchestrates the whole Talos lifecycle for one play run against the
+# `talos_nodes` group (see playbooks/30-bootstrap-talos.yml): schematic IDs,
+# cluster-wide secrets/config generation, per-node machine-config render +
+# apply, cluster bootstrap, API-readiness wait, kubeconfig, and an optional
+# health gate. Equivalent to modules/talos-cluster + schematic.tf combined.
+#
+# Steps marked `run_once: true` are cluster-scoped (there is exactly one
+# Talos secrets bundle, one talosconfig, one bootstrap event, one kubeconfig
+# for the whole cluster) — Ansible still runs them physically once even
+# though the play iterates over every talos_nodes host, since
+# ansible_connection: local means every "host" in that group actually
+# executes on the same control node.
+
+- name: Fetch/record Talos Image Factory schematic IDs (once)
+  ansible.builtin.include_role:
+    name: talos_schematic
+  run_once: true
+
+- name: Load schematic IDs recorded by talos_schematic
+  ansible.builtin.include_vars:
+    file: "{{ talos_gen_dir }}/schematic-ids.yml"
+
+- name: Generate the Talos secrets bundle (once, ever)
+  ansible.builtin.include_tasks: secrets.yml
+  run_once: true
+
+- name: Generate base talosconfig + controlplane/worker machine configs (once, ever)
+  ansible.builtin.include_tasks: render_config.yml
+  run_once: true
+
+- name: Render and apply this node's machine configuration
+  ansible.builtin.include_tasks: apply_config.yml
+
+- name: Bootstrap the cluster (first controlplane node only, once ever)
+  ansible.builtin.include_tasks: bootstrap.yml
+  run_once: true
+
+- name: Wait for the Kubernetes API to answer
+  ansible.builtin.include_tasks: wait_for_api.yml
+  run_once: true
+  when: wait_for_api | bool
+
+- name: Write kubeconfig
+  ansible.builtin.include_tasks: kubeconfig.yml
+  run_once: true
+
+- name: Optional Talos cluster health gate
+  ansible.builtin.include_tasks: health.yml
+  run_once: true
+  when: wait_for_health | bool

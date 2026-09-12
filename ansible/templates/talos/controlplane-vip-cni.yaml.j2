@@ -1,0 +1,23 @@
+{# Controlplane-only patch: the Layer2VIPConfig document plus (when cni is
+   cilium) the cluster.network.cni:none + proxy.disabled:true document that
+   tells Talos not to install its own Flannel/kube-proxy. Equivalent to
+   local.controlplane_patches in modules/talos-cluster/main.tf — kept as two
+   "---"-separated documents in one file, applied via a single `--patch @file`
+   the same way that list is concatenated there.
+
+   Only rendered/used for hosts in the `controlplane` group — see
+   roles/talos_bootstrap/tasks/apply_config.yml. #}
+---
+apiVersion: v1alpha1
+kind: Layer2VIPConfig
+name: {{ controlplane_vip }}
+link: eth0
+{% if cni == 'cilium' %}
+---
+cluster:
+  network:
+    cni:
+      name: none
+  proxy:
+    disabled: true
+{% endif %}

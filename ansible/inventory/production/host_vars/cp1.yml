@@ -1,0 +1,10 @@
+# Mapped 1:1 from terraform.tfvars' nodes.cp1.
+---
+vm_id: 10000
+node_name: cp1
+ip: 192.168.1.201
+cidr: 24
+mac: "BC:24:11:00:01:01"
+cores: 2
+memory: 6144
+disk: 50

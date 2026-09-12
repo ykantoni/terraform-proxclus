@@ -1,0 +1,49 @@
+---
+# Wraps vm-templates/build-template.sh unchanged rather than reimplementing
+# its `qm create`/`importdisk`/`resize`/`template` sequence natively: no
+# Proxmox Ansible module currently covers "import a raw disk and convert it
+# to a template" cleanly, and the script is already operationally verified.
+#
+# The script's own RAW_IMAGE existence check (see
+# files/vm-templates/build-template.sh) only short-circuits the download
+# step — `qm create`/`qm template` are NOT self-guarded, so re-running this
+# against a vmid that already exists would fail outright. The `creates:`
+# argument on each command task below is the guard that makes this
+# idempotent, standing in for what a .tfstate diff gives Terraform for free.
+
+- name: Stage build-template.sh on the Proxmox host
+  ansible.builtin.copy:
+    src: "{{ role_path }}/../../files/vm-templates/build-template.sh"
+    dest: "{{ vm_template_remote_dir }}/build-template.sh"
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+
+- name: Stage the Image Factory customization schematics build-template.sh reads (../customization-<type>.yaml relative to itself)
+  ansible.builtin.copy:
+    src: "{{ role_path }}/../../files/talos/{{ item }}"
+    dest: "{{ vm_template_remote_root }}/{{ item }}"
+    owner: root
+    group: root
+    mode: "0644"
+  loop:
+    - customization-common.yaml
+    - customization-gpu.yaml
+  become: true
+
+- name: Build the plain (common) VM template
+  ansible.builtin.command:
+    cmd: >-
+      {{ vm_template_remote_dir }}/build-template.sh
+      {{ talos_template_name_common }} common {{ template_vmid_common }}
+    creates: "/etc/pve/qemu-server/{{ template_vmid_common }}.conf"
+  become: true
+
+- name: Build the GPU (NVIDIA) VM template
+  ansible.builtin.command:
+    cmd: >-
+      {{ vm_template_remote_dir }}/build-template.sh
+      {{ talos_template_name_gpu }} gpu {{ template_vmid_gpu }}
+    creates: "/etc/pve/qemu-server/{{ template_vmid_gpu }}.conf"
+  become: true

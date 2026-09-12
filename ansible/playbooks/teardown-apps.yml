@@ -1,0 +1,53 @@
+---
+# Reverse of 50-apps.yml. Namespace deletion cascades to everything inside
+# it, so the plain-Postgres teardown just deletes its two namespaces rather
+# than re-parsing the rendered manifest (which may not even exist yet in a
+# fresh checkout that never ran the install play).
+- name: Tear down applications
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Uninstall Open WebUI
+      kubernetes.core.helm:
+        kubeconfig: "{{ kubeconfig_path }}"
+        name: open-webui
+        release_namespace: "{{ ollama_namespace }}"
+        state: absent
+      tags: [ollama]
+
+    - name: Uninstall Ollama
+      kubernetes.core.helm:
+        kubeconfig: "{{ kubeconfig_path }}"
+        name: ollama
+        release_namespace: "{{ ollama_namespace }}"
+        state: absent
+      tags: [ollama]
+
+    - name: Uninstall the Postgres Cluster (CNPG)
+      kubernetes.core.helm:
+        kubeconfig: "{{ kubeconfig_path }}"
+        name: "{{ cnpg_cluster_name }}-cluster"
+        release_namespace: "{{ cnpg_namespace }}"
+        state: absent
+      tags: [postgres-cnpg]
+
+    - name: Uninstall the CloudNativePG operator
+      kubernetes.core.helm:
+        kubeconfig: "{{ kubeconfig_path }}"
+        name: cnpg
+        release_namespace: "{{ cnpg_operator_namespace }}"
+        state: absent
+      tags: [postgres-cnpg]
+
+    - name: Delete the plain Postgres namespaces (cascades to everything in them)
+      kubernetes.core.k8s:
+        kubeconfig: "{{ kubeconfig_path }}"
+        state: absent
+        api_version: v1
+        kind: Namespace
+        name: "{{ item }}"
+      loop:
+        - "{{ postgres_plain_primary_namespace }}"
+        - "{{ postgres_plain_standby_namespace }}"
+      tags: [postgres-plain]

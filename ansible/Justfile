@@ -1,0 +1,59 @@
+# Task runner for the Ansible version of this cluster. Run `just --list` to
+# see all recipes. Mirrors the recipe names from the Terraform project's own
+# root Justfile so the day-to-day muscle memory carries over unchanged.
+
+INVENTORY := "inventory/production/hosts.yml"
+
+# Full end-to-end bootstrap: host prep -> templates -> VMs -> Talos -> addons -> apps.
+apply:
+    ansible-playbook -i {{INVENTORY}} playbooks/site.yml
+
+# Dry-run: --check --diff is only fully meaningful for the Helm/Kubernetes-
+# module-backed addon and app plays — talosctl/qm-backed command tasks don't
+# honor --check, they rely on their own `creates:`/changed_when guards.
+plan:
+    ansible-playbook -i {{INVENTORY}} playbooks/site.yml --check --diff
+
+# Addons only.
+addons:
+    ansible-playbook -i {{INVENTORY}} playbooks/40-addons.yml
+
+# Apps only (all three; pass e.g. `just app ollama` for just one).
+apps:
+    ansible-playbook -i {{INVENTORY}} playbooks/50-apps.yml
+
+# One app only: `just app ollama` / `just app postgres-cnpg` / `just app postgres-plain`.
+app name:
+    ansible-playbook -i {{INVENTORY}} playbooks/50-apps.yml --tags {{name}}
+
+# Build both Proxmox VM templates (vmid 9000 plain, 9001 GPU).
+t-create:
+    ansible-playbook -i {{INVENTORY}} playbooks/10-build-templates.yml
+
+# Destroy both templates.
+t-destroy:
+    ansible-playbook -i {{INVENTORY}} playbooks/teardown-templates.yml
+
+# Create the plain Postgres primary/standby.
+pg-create:
+    ansible-playbook -i {{INVENTORY}} playbooks/50-apps.yml --tags postgres-plain
+
+# Destroy the plain Postgres primary/standby.
+pg-destroy:
+    ansible-playbook -i {{INVENTORY}} playbooks/teardown-apps.yml --tags postgres-plain
+
+# Tear down everything this project manages: apps -> addons (Longhorn
+# delete-protection patch first) -> the cluster's VMs.
+destroy:
+    ansible-playbook -i {{INVENTORY}} playbooks/teardown-apps.yml
+    ansible-playbook -i {{INVENTORY}} playbooks/teardown-addons.yml
+    ansible-playbook -i {{INVENTORY}} playbooks/teardown-cluster.yml
+
+# Lint everything.
+lint:
+    ansible-lint .
+    yamllint .
+
+# Install/refresh the pinned collections.
+collections:
+    ansible-galaxy collection install -r requirements.yml

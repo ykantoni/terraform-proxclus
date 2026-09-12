@@ -1,0 +1,74 @@
+---
+# Equivalent to modules/addons/prometheus/main.tf. PVCs default to the
+# "longhorn" StorageClass, so this needs enable_longhorn: true too (same
+# constraint as the Terraform module) — see playbooks/40-addons.yml's
+# ordering (addon_longhorn before addon_prometheus).
+
+- name: Create the monitoring namespace (privileged pod-security labels)
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Namespace
+      metadata:
+        name: "{{ monitoring_namespace }}"
+        labels:
+          # prometheus-node-exporter's DaemonSet (bundled with this chart)
+          # needs hostNetwork, hostPID and hostPath mounts of /proc and /sys
+          # to read host-level metrics, all forbidden by the restricted Pod
+          # Security Standard.
+          pod-security.kubernetes.io/enforce: privileged
+          pod-security.kubernetes.io/audit: privileged
+          pod-security.kubernetes.io/warn: privileged
+
+- name: Install kube-prometheus-stack
+  kubernetes.core.helm:
+    kubeconfig: "{{ kubeconfig_path }}"
+    name: kube-prometheus-stack
+    chart_ref: kube-prometheus-stack
+    chart_repo_url: "https://prometheus-community.github.io/helm-charts"
+    chart_version: "{{ kube_prometheus_stack_version }}"
+    release_namespace: "{{ monitoring_namespace }}"
+    wait: true
+    timeout: "{{ prometheus_helm_timeout }}s"
+    values:
+      prometheus:
+        prometheusSpec:
+          retention: "{{ prometheus_retention }}"
+          # This is a single-tenant homelab cluster: false makes Prometheus
+          # pick up any ServiceMonitor/PodMonitor/PrometheusRule in any
+          # namespace automatically, with no release label for other addons'
+          # charts to remember to set.
+          serviceMonitorSelectorNilUsesHelmValues: false
+          podMonitorSelectorNilUsesHelmValues: false
+          ruleSelectorNilUsesHelmValues: false
+          storageSpec:
+            volumeClaimTemplate:
+              spec:
+                storageClassName: "{{ prometheus_storage_class }}"
+                accessModes: [ReadWriteOnce]
+                resources:
+                  requests:
+                    storage: "{{ prometheus_storage_size }}"
+        service:
+          type: "{{ prometheus_service_type }}"
+      alertmanager:
+        alertmanagerSpec:
+          storage:
+            volumeClaimTemplate:
+              spec:
+                storageClassName: "{{ prometheus_storage_class }}"
+                accessModes: [ReadWriteOnce]
+                resources:
+                  requests:
+                    storage: "{{ alertmanager_storage_size }}"
+      grafana:
+        enabled: "{{ enable_grafana }}"
+        adminPassword: "{{ vault_grafana_admin_password }}"
+        service:
+          type: "{{ grafana_service_type }}"
+        persistence:
+          enabled: true
+          storageClassName: "{{ prometheus_storage_class }}"
+          size: "{{ grafana_storage_size }}"

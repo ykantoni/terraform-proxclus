@@ -1,0 +1,72 @@
+---
+# Per-node machine-config patch layering + apply — equivalent to
+# data.talos_machine_configuration.node's config_patches list plus
+# talos_machine_configuration_apply.node's GPU-only extra patches in
+# modules/talos-cluster/main.tf.
+#
+# Patch order mirrors that Terraform resource exactly: base install/network
+# (+certSANs), then controlplane VIP/CNI (controlplane only), then the
+# always-on longhorn-mounts patch (all nodes, when enable_longhorn), then the
+# GPU-only nvidia-modules + ollama-models-mounts patches.
+
+- name: Ensure the rendered-config directory exists
+  ansible.builtin.file:
+    path: "{{ talos_rendered_dir }}"
+    state: directory
+    mode: "0700"
+
+- name: Render this node's network/install (+certSANs) patch
+  ansible.builtin.template:
+    src: "{{ role_path }}/../../templates/talos/node-network-install.yaml.j2"
+    dest: "{{ talos_rendered_dir }}/{{ node_name }}-network-install.patch.yaml"
+    mode: "0600"
+
+- name: Render this node's VIP/CNI patch (controlplane only)
+  ansible.builtin.template:
+    src: "{{ role_path }}/../../templates/talos/controlplane-vip-cni.yaml.j2"
+    dest: "{{ talos_rendered_dir }}/{{ node_name }}-vip-cni.patch.yaml"
+    mode: "0600"
+  when: role == 'controlplane'
+
+- name: Build this node's ordered list of patch files
+  ansible.builtin.set_fact:
+    node_patch_files: >-
+      {{
+        [talos_rendered_dir ~ '/' ~ node_name ~ '-network-install.patch.yaml']
+        + ([talos_rendered_dir ~ '/' ~ node_name ~ '-vip-cni.patch.yaml'] if role == 'controlplane' else [])
+        + ([role_path ~ '/../../files/talos/patches/longhorn-mounts.patch.yaml'] if enable_longhorn | bool else [])
+        + ([role_path ~ '/../../files/talos/patches/nvidia-modules.patch.yaml',
+            role_path ~ '/../../files/talos/patches/ollama-models-mounts.patch.yaml'] if pcigpu is defined else [])
+      }}
+
+- name: Render this node's final machine configuration to a staging file
+  ansible.builtin.command:
+    # cmd (not shell) so Ansible's own arg-splitting handles each "--patch
+    # @path" pair as separate argv tokens — a Jinja loop building "--patch
+    # @<path>" tokens directly, rather than a regex_replace map (whose \1
+    # backreference risks Jinja/Python's string-literal escaping treating it
+    # as an octal escape instead of a literal backslash-digit).
+    cmd: >-
+      talosctl machineconfig patch
+      {{ talos_gen_dir }}/{{ 'controlplane' if role == 'controlplane' else 'worker' }}.yaml
+      {% for f in node_patch_files %}--patch @{{ f }} {% endfor %}
+      -o {{ talos_rendered_dir }}/{{ node_name }}.staged.yaml
+  changed_when: true
+
+- name: Copy the staged config into place, detecting whether it actually changed
+  ansible.builtin.copy:
+    src: "{{ talos_rendered_dir }}/{{ node_name }}.staged.yaml"
+    dest: "{{ talos_rendered_dir }}/{{ node_name }}.yaml"
+    remote_src: true
+    mode: "0600"
+  register: rendered
+
+- name: Apply machine configuration to the node
+  ansible.builtin.command:
+    cmd: >-
+      talosctl apply-config
+      -n {{ ip }} -e {{ ip }}
+      --file {{ talos_rendered_dir }}/{{ node_name }}.yaml
+      --talosconfig {{ talos_gen_dir }}/talosconfig
+      {{ '--insecure' if talos_apply_insecure | bool else '' }}
+  when: rendered.changed

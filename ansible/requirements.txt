@@ -1,0 +1,17 @@
+# Python dependencies for the control node (the Proxmox host itself).
+# Install with: pip install -r requirements.txt
+# (a venv is recommended: python3 -m venv .venv && . .venv/bin/activate)
+
+# community.proxmox modules talk to the Proxmox REST API through these.
+proxmoxer>=2.0.1
+requests>=2.31.0
+
+# kubernetes.core.k8s / k8s_info / k8s_json_patch talk to the cluster through
+# the official Python client, same as Terraform's kubernetes provider does
+# under the hood.
+kubernetes>=30.1.0
+
+# YAML patch construction/parsing used by several role tasks, and by
+# kubernetes.core.k8s_json_patch.
+PyYAML>=6.0
+jsonpatch>=1.33

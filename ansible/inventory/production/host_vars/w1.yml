@@ -1,0 +1,15 @@
+# Mapped 1:1 from terraform.tfvars' nodes.worker1. The only worker with
+# pcigpu set — drives GPU template selection (proxmox_vm), the nvidia-modules
+# + ollama-models-mounts Talos machine-config patches (talos_bootstrap), the
+# nvidia-device-plugin node label (addon_nvidia_device_plugin), and being the
+# node app_ollama's local PV/pod are pinned to.
+---
+vm_id: 10001
+node_name: w1
+ip: 192.168.1.202
+cidr: 24
+mac: "BC:24:11:00:01:02"
+cores: 4
+memory: 12284
+disk: 50
+pcigpu: RTX5060Ti

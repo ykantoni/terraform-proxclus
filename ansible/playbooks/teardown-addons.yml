@@ -1,0 +1,77 @@
+---
+# Reverse of 40-addons.yml, porting the root Justfile's `destroy` recipe's
+# Longhorn delete-protection patch: only runs if the API server is actually
+# reachable (a re-run after a prior teardown already succeeded has nothing
+# left for it to guard).
+- name: Tear down cluster addons
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Check whether the API server is reachable
+      ansible.builtin.command:
+        cmd: "kubectl --kubeconfig {{ kubeconfig_path }} cluster-info --request-timeout=5s"
+      register: cluster_reachable
+      changed_when: false
+      failed_when: false
+
+    - name: Disable Longhorn's delete-confirmation guard
+      kubernetes.core.k8s_json_patch:
+        kubeconfig: "{{ kubeconfig_path }}"
+        api_version: longhorn.io/v1beta2
+        kind: Setting
+        name: deleting-confirmation-flag
+        namespace: "{{ longhorn_namespace }}"
+        patch:
+          - op: replace
+            path: /value
+            value: "true"
+      when: cluster_reachable.rc == 0
+
+    - name: Uninstall kube-prometheus-stack
+      kubernetes.core.helm:
+        kubeconfig: "{{ kubeconfig_path }}"
+        name: kube-prometheus-stack
+        release_namespace: "{{ monitoring_namespace }}"
+        state: absent
+      tags: [prometheus]
+
+    - name: Uninstall nvidia-device-plugin
+      kubernetes.core.helm:
+        kubeconfig: "{{ kubeconfig_path }}"
+        name: nvidia-device-plugin
+        release_namespace: "{{ nvidia_device_plugin_namespace }}"
+        state: absent
+      tags: [nvidia-device-plugin]
+
+    - name: Uninstall metrics-server
+      kubernetes.core.helm:
+        kubeconfig: "{{ kubeconfig_path }}"
+        name: metrics-server
+        release_namespace: "{{ metrics_server_namespace }}"
+        state: absent
+      tags: [metrics-server]
+
+    - name: Uninstall Longhorn
+      kubernetes.core.helm:
+        kubeconfig: "{{ kubeconfig_path }}"
+        name: longhorn
+        release_namespace: "{{ longhorn_namespace }}"
+        state: absent
+      tags: [longhorn]
+
+    - name: Uninstall the Cilium LB-IPAM + L2 announcement policy chart
+      kubernetes.core.helm:
+        kubeconfig: "{{ kubeconfig_path }}"
+        name: cilium-lb-ipam
+        release_namespace: kube-system
+        state: absent
+      tags: [cilium]
+
+    - name: Uninstall Cilium
+      kubernetes.core.helm:
+        kubeconfig: "{{ kubeconfig_path }}"
+        name: cilium
+        release_namespace: kube-system
+        state: absent
+      tags: [cilium]

@@ -1,0 +1,9 @@
+---
+vm_template_remote_root: /opt/talos-proxmox
+vm_template_remote_dir: "{{ vm_template_remote_root }}/vm-templates"
+
+# Template names build-template.sh embeds in `qm create --name`, matching
+# vm-templates/qemu-iscsi-2c.sh and nvidia-qemu-iscsi-2c.sh in the Terraform
+# project verbatim.
+talos_template_name_common: "talos-1.13.8-qemu-iscsi-2c"
+talos_template_name_gpu: "talos-1.13.8-nvidia-qemu-iscsi-2c"

@@ -1,0 +1,13 @@
+[Unit]
+Description=Resize RTX 5060 Ti BAR1 to 128 MiB
+Before=pve-guests.service
+After=systemd-modules-load.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/resize-rtx5060ti-bar.sh
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
+

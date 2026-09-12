@@ -1,0 +1,68 @@
+---
+# Equivalent to apps/postgres-cnpg/main.tf. CNPG generates its own Secrets
+# for the superuser/app roles (<cluster_name>-superuser / <cluster_name>-app)
+# once the Cluster comes up — nothing here handles Postgres credentials
+# directly, same as the Terraform version.
+#
+# NOTE: this app was never applied by the Terraform project (no
+# postgres.tfstate exists on disk) — there is no live state to adopt here,
+# unlike app_ollama and app_postgres_plain. Safe to just run fresh.
+
+- name: Create the CNPG operator namespace
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Namespace
+      metadata:
+        name: "{{ cnpg_operator_namespace }}"
+
+- name: Create the Postgres cluster namespace
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Namespace
+      metadata:
+        name: "{{ cnpg_namespace }}"
+
+# Installs the CloudNativePG CRDs (Cluster, Pooler, Backup, ...) along with
+# the operator Deployment. The operator watches every namespace by default,
+# so one install here is enough regardless of which namespace the Cluster
+# below ends up in.
+- name: Install the CloudNativePG operator
+  kubernetes.core.helm:
+    kubeconfig: "{{ kubeconfig_path }}"
+    name: cnpg
+    chart_ref: cloudnative-pg
+    chart_repo_url: "https://cloudnative-pg.github.io/charts"
+    chart_version: "{{ cnpg_operator_version }}"
+    release_namespace: "{{ cnpg_operator_namespace }}"
+    wait: true
+    timeout: "{{ cnpg_helm_timeout }}s"
+
+# The Cluster resource ships as a tiny local chart, vendored unchanged from
+# apps/postgres-cnpg/charts/postgres-cluster, rather than a raw
+# kubernetes.core.k8s manifest — kept purely for consistency with every
+# other addon/app's Helm-based install/uninstall lifecycle in this project.
+- name: Install the Postgres Cluster
+  kubernetes.core.helm:
+    kubeconfig: "{{ kubeconfig_path }}"
+    name: "{{ cnpg_cluster_name }}-cluster"
+    chart_ref: "{{ role_path }}/files/charts/postgres-cluster"
+    release_namespace: "{{ cnpg_namespace }}"
+    wait: true
+    timeout: "{{ cnpg_helm_timeout }}s"
+    values:
+      name: "{{ cnpg_cluster_name }}"
+      instances: "{{ cnpg_instances }}"
+      imageName: "{{ cnpg_postgres_image }}"
+      storage:
+        size: "{{ cnpg_storage_size }}"
+        storageClass: "{{ cnpg_storage_class }}"
+      bootstrap:
+        initdb:
+          database: "{{ cnpg_database_name }}"
+          owner: "{{ cnpg_database_owner }}"

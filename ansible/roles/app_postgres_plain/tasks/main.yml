@@ -1,0 +1,32 @@
+---
+# Equivalent to apps/postgres/postgres-primary-standby.yaml, applied via
+# plain `kubectl apply` in the Terraform project's Justfile (pg-create /
+# pg-destroy) rather than through Terraform itself. Fixes that file's
+# plaintext committed credentials (Secret stringData + .env.primary /
+# .env.standby files) by templating them from vault instead — see
+# inventory/production/group_vars/all/vault.yml.example. Only the credential
+# *source* changed; the manifest's own structure/behavior is unchanged.
+#
+# When adopting the already-running plain Postgres in place (migration plan
+# Phase 3), seed vault.yml with the EXACT current live password values
+# first, so this first templated apply is byte-identical and no pod
+# restarts — only rotate to genuinely new values afterward, as a separate,
+# deliberate step.
+
+- name: Ensure the local rendering directory exists
+  ansible.builtin.file:
+    path: "{{ postgres_plain_rendered_path | dirname }}"
+    state: directory
+    mode: "0700"
+
+- name: Render the Postgres primary/standby manifest
+  ansible.builtin.template:
+    src: "{{ role_path }}/../../templates/postgres-plain/postgres-primary-standby.yaml.j2"
+    dest: "{{ postgres_plain_rendered_path }}"
+    mode: "0600"
+
+- name: Apply the Postgres primary/standby manifest
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    state: present
+    src: "{{ postgres_plain_rendered_path }}"

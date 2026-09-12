@@ -1,0 +1,30 @@
+{# Per-node install/network/KubePrism (+ optional certSANs) machine-config
+   patch — the Ansible equivalent of the first yamlencode() block (plus the
+   external_ip certSANs block, merged in here since both target the same
+   top-level "machine:" key and a strategic-merge patch is associative for
+   disjoint sub-keys) in modules/talos-cluster/main.tf's
+   data.talos_machine_configuration.node config_patches. #}
+machine:
+  install:
+    disk: /dev/sda
+    image: "factory.talos.dev/metal-installer/{{ talos_schematic_id_gpu if pcigpu is defined else talos_schematic_id_common }}:{{ talos_version }}"
+  features:
+    kubePrism:
+      enabled: true
+      port: {{ kube_prism_port }}
+  network:
+    interfaces:
+      - interface: eth0
+        addresses:
+          - "{{ ip }}/{{ cidr | default(24) }}"
+        routes:
+          - network: 0.0.0.0/0
+            gateway: {{ gateway }}
+    nameservers:
+{% for ns in nameservers %}
+      - {{ ns }}
+{% endfor %}
+{% if external_ip is defined and external_ip %}
+  certSANs:
+    - "{{ external_ip }}"
+{% endif %}

@@ -1,0 +1,23 @@
+---
+# talos_machine_bootstrap equivalent — runs against the first controlplane
+# node only, exactly once for the cluster's lifetime.
+
+- name: Determine the bootstrap node's IP (first controlplane host)
+  ansible.builtin.set_fact:
+    bootstrap_ip: "{{ hostvars[groups['controlplane'][0]].ip }}"
+
+- name: Bootstrap the Talos cluster (etcd)
+  ansible.builtin.command:
+    cmd: >-
+      talosctl bootstrap
+      -n {{ bootstrap_ip }} -e {{ bootstrap_ip }}
+      --talosconfig {{ talos_gen_dir }}/talosconfig
+  register: bootstrap_result
+  changed_when: bootstrap_result.rc == 0
+  # Tolerates re-running against an already-bootstrapped cluster: bootstrap is
+  # a one-time etcd-init call, and talosctl's own error text is the only
+  # signal available that this specific case is safe to ignore.
+  failed_when: >-
+    bootstrap_result.rc != 0 and
+    'AlreadyExists' not in bootstrap_result.stderr and
+    'etcd data directory is not empty' not in bootstrap_result.stderr

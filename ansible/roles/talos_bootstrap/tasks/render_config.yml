@@ -1,0 +1,20 @@
+---
+# Base talosconfig + controlplane.yaml/worker.yaml — equivalent to
+# talos_machine_secrets.this.client_configuration +
+# data.talos_machine_configuration's un-patched machine_configuration_input.
+# Per-node patches are layered on top of these two files in apply_config.yml.
+
+- name: Ensure the local Talos working directory exists
+  ansible.builtin.file:
+    path: "{{ talos_gen_dir }}"
+    state: directory
+    mode: "0700"
+
+- name: Generate base talosconfig + controlplane/worker machine configs
+  ansible.builtin.command:
+    cmd: >-
+      talosctl gen config {{ cluster_name }}
+      https://{{ controlplane_vip }}:6443
+      --with-secrets {{ talos_secrets_path }}
+      --output-dir {{ talos_gen_dir }}
+    creates: "{{ talos_gen_dir }}/talosconfig"

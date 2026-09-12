@@ -1,0 +1,3 @@
+---
+talos_factory_url: "https://factory.talos.dev/schematics"
+schematic_ids_file: "{{ talos_gen_dir }}/schematic-ids.yml"

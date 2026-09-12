@@ -1,0 +1,70 @@
+---
+# Clones a Talos VM from the appropriate Proxmox template (9000 plain / 9001
+# GPU) and sets cores/memory/disk/network/GPU-passthrough — the Ansible
+# equivalent of modules/proxmox-talos-vm's `proxmox_virtual_environment_vm.talos`
+# resource in the Terraform project.
+#
+# Runs once per talos_nodes inventory host, on the control node itself
+# (ansible_connection: local on that group — see inventory/production/hosts.yml):
+# this talks to the Proxmox REST API, not the VM (which doesn't exist yet on
+# the first run, and has no SSH daemon even once it does — see
+# talos_bootstrap). community.proxmox.proxmox_kvm re-queries live Proxmox
+# state every run, so this is naturally idempotent the same way Terraform's
+# own provider is — no `creates:`-style guard is needed here.
+#
+# VERIFY BEFORE FIRST REAL RUN: these parameter names against the installed
+# collection version (`ansible-doc community.proxmox.proxmox_kvm`) —
+# community.proxmox is young enough that names may have moved from its
+# community.general.proxmox_kvm predecessor. `hostpci` support in particular
+# is worth confirming; if it's missing or behaves differently, fall back to a
+# raw `ansible.builtin.uri` PUT against
+# /nodes/{{ proxmox_node }}/qemu/{{ vm_id }}/config with
+# hostpci0=<mapping>,pcie=1 instead of the `hostpci` param below.
+
+- name: Clone and configure the Talos VM
+  community.proxmox.proxmox_kvm:
+    api_host: "{{ proxmox_api_host }}"
+    # vault_proxmox_api_token_id is stored as Proxmox's own combined
+    # "<user>@<realm>!<token-name>" form (e.g. "terraform@pve!ansible"),
+    # matching the PROXMOX_VE_API_TOKEN format the Terraform workflow already
+    # uses — split it into the two fields this module wants separately.
+    api_user: "{{ vault_proxmox_api_token_id.split('!')[0] }}"
+    api_token_id: "{{ vault_proxmox_api_token_id.split('!')[1] }}"
+    api_token_secret: "{{ vault_proxmox_api_token_secret }}"
+    validate_certs: "{{ proxmox_validate_certs }}"
+
+    node: "{{ proxmox_node }}"
+    name: "{{ node_name }}"
+
+    # Source template to clone from (9000 plain / 9001 GPU) and target vmid —
+    # mirrors `clone { vm_id = pcigpu != null ? 9001 : 9000; full = true }`.
+    vmid: "{{ template_vmid_gpu if pcigpu is defined else template_vmid_common }}"
+    newid: "{{ vm_id }}"
+    full: true
+    update: true # let re-runs update config instead of failing "already exists"
+    timeout: "{{ proxmox_clone_timeout }}"
+
+    tags:
+      - ansible
+      - talos
+      - "{{ role }}"
+
+    cores: "{{ cores }}"
+    cpu: host
+    memory: "{{ memory }}"
+
+    scsihw: virtio-scsi-pci
+    disk:
+      scsi0: "{{ datastore_id }}:{{ disk }},cache=writethrough,discard=on,ssd=1"
+
+    net:
+      net0: "virtio,bridge={{ bridge }},macaddr={{ mac }}"
+
+    hostpci: "{{ {'hostpci0': pcigpu ~ ',pcie=1'} if pcigpu is defined else omit }}"
+
+    agent: "enabled=1"
+    boot: "order=scsi0"
+    serial:
+      serial0: socket
+
+    state: "{{ vm_state }}"

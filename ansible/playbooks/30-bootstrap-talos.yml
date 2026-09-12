@@ -1,0 +1,9 @@
+---
+# Equivalent to modules/talos-cluster + schematic.tf: schematic IDs, secrets,
+# per-node machine config, bootstrap, API wait, kubeconfig, optional health
+# gate. See roles/talos_bootstrap/tasks/main.yml for the full step ordering.
+- name: Bootstrap the Talos/Kubernetes cluster
+  hosts: talos_nodes
+  gather_facts: false
+  roles:
+    - talos_bootstrap

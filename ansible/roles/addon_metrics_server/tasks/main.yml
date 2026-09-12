@@ -1,0 +1,24 @@
+---
+# Equivalent to modules/addons/metrics-server/main.tf.
+
+- name: Install metrics-server
+  kubernetes.core.helm:
+    kubeconfig: "{{ kubeconfig_path }}"
+    name: metrics-server
+    chart_ref: metrics-server
+    chart_repo_url: "https://kubernetes-sigs.github.io/metrics-server/"
+    chart_version: "{{ metrics_server_version }}"
+    release_namespace: "{{ metrics_server_namespace }}"
+    wait: true
+    timeout: "{{ metrics_server_helm_timeout }}s"
+    values:
+      args:
+        # Talos kubelets don't have a DNS-resolvable hostname, so the
+        # Hostname address type metrics-server prefers by default never
+        # connects; InternalIP is what's actually reachable.
+        - "--kubelet-preferred-address-types=InternalIP"
+        # The kubelet serving certificate at that address is signed by the
+        # cluster's own CA, which isn't in metrics-server's trust store.
+        # Skipping verification is the standard workaround on Talos (and
+        # most kubeadm clusters), not a Talos-specific weakening.
+        - "--kubelet-insecure-tls"

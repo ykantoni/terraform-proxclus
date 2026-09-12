@@ -1,0 +1,3 @@
+# The Proxmox VE hypervisor host itself. Connection details are in
+# group_vars/proxmox_hosts/vars.yml; nothing node-specific needed here today.
+---

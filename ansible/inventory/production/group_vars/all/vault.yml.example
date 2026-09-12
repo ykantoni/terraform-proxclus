@@ -1,0 +1,42 @@
+# Template for the secrets file. This file is PLAINTEXT and safe to commit —
+# it only documents variable names and placeholder shapes, never real values.
+#
+# To use it:
+#   cp vault.yml.example vault.yml
+#   <fill in real values below>
+#   ansible-vault encrypt vault.yml
+#
+# From then on, edit it with `ansible-vault edit vault.yml` — never open it
+# directly in a plain editor once encrypted. vault.yml itself is gitignored
+# (see ansible/.gitignore) so an accidental `ansible-vault decrypt` never gets
+# committed in plaintext either.
+#
+# See README.md's "Vault setup" section for how to create the vault password
+# file this project's ansible.cfg points at.
+---
+# Proxmox VE API token, split id/secret. Replaces the plaintext
+# PROXMOX_VE_API_TOKEN currently exported in ~/.bashrc for the Terraform
+# workflow. Generate one in the Proxmox UI: Datacenter -> Permissions -> API
+# Tokens (a token tied to a user with the necessary VM/storage privileges).
+vault_proxmox_api_token_id: "terraform@pve!ansible"
+vault_proxmox_api_token_secret: "REPLACE_ME"
+
+# Grafana admin login password (kube-prometheus-stack addon). The Terraform
+# project never overrides the chart's own plaintext default
+# ("prom-operator") — worth actually setting a real value now that it's
+# vaulted, since Grafana's Service defaults to LoadBalancer (reachable on the
+# LAN).
+vault_grafana_admin_password: "REPLACE_ME"
+
+# Plain (non-CNPG) Postgres credentials — apps/postgres in the Terraform
+# project committed these in plaintext (Secret stringData + .env.primary/
+# .env.standby); this is the fix. When adopting the already-running plain
+# Postgres in place (see the migration plan's Phase 3), seed these with the
+# EXACT current live values first (kubectl -n postgres-primary get secret
+# postgres-primary-credentials -o jsonpath='{.data.POSTGRES_PASSWORD}' | base64 -d,
+# etc.) so the first templated apply is byte-identical and no pod restarts —
+# only rotate to genuinely new values afterward, as a separate, deliberate
+# step.
+vault_postgres_plain_user: "REPLACE_ME"
+vault_postgres_plain_primary_password: "REPLACE_ME"
+vault_postgres_plain_standby_password: "REPLACE_ME"

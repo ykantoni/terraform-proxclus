@@ -1,0 +1,16 @@
+---
+# data.talos_cluster_health equivalent. Off by default (wait_for_health:
+# false in group_vars/all/vars.yml) for the same reason as the Terraform
+# project: cp1/w2/w3 never reach Talos stage "running" because the shared
+# NVIDIA-extension image waits forever for a GPU those nodes don't have.
+# Kubernetes itself is unaffected — turn this back on once only GPU nodes
+# carry the NVIDIA extensions.
+
+- name: Talos cluster health check
+  ansible.builtin.command:
+    cmd: >-
+      talosctl health
+      --control-plane-nodes {{ groups['controlplane'] | map('extract', hostvars, 'ip') | join(',') }}
+      --worker-nodes {{ groups['workers'] | map('extract', hostvars, 'ip') | join(',') }}
+      --talosconfig {{ talos_gen_dir }}/talosconfig
+  changed_when: false

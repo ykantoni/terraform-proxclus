@@ -1,0 +1,82 @@
+---
+# Equivalent to modules/addons/cilium/main.tf. Two Helm releases: the real
+# Cilium chart, then a small vendored local chart (files/charts/cilium-lb-ipam)
+# for the CiliumLoadBalancerIPPool + CiliumL2AnnouncementPolicy CRs — kept as
+# a chart (not raw kubernetes.core.k8s manifests) purely for teardown
+# consistency with every other addon/app in this project; nothing here
+# actually requires it to be a chart the way Terraform's plan-time CRD schema
+# lookup did.
+
+- name: Install Cilium
+  kubernetes.core.helm:
+    kubeconfig: "{{ kubeconfig_path }}"
+    name: cilium
+    chart_ref: cilium
+    chart_repo_url: "https://helm.cilium.io/"
+    chart_version: "{{ cilium_version }}"
+    release_namespace: "{{ cilium_namespace }}"
+    wait: true
+    timeout: "{{ cilium_helm_timeout }}s"
+    values:
+      # Pod IPs come from the podCIDR kube-controller-manager hands each node.
+      ipam:
+        mode: kubernetes
+      # Talos deploys no kube-proxy when cni is cilium, so Cilium must take
+      # over service routing. L2 announcements also require it.
+      kubeProxyReplacement: true
+      # KubePrism fronts the control plane on every node, so Cilium keeps
+      # talking to the API server even while it is the thing providing
+      # cluster networking.
+      k8sServiceHost: localhost
+      k8sServicePort: "{{ kube_prism_port }}"
+      # Talos mounts cgroupv2 and bpffs itself; Cilium must not remount them.
+      cgroup:
+        autoMount:
+          enabled: false
+        hostRoot: /sys/fs/cgroup
+      # Talos forbids workloads from loading kernel modules, so SYS_MODULE is
+      # dropped from Cilium's default capability set.
+      securityContext:
+        capabilities:
+          ciliumAgent:
+            - CHOWN
+            - KILL
+            - NET_ADMIN
+            - NET_RAW
+            - IPC_LOCK
+            - SYS_ADMIN
+            - SYS_RESOURCE
+            - DAC_OVERRIDE
+            - FOWNER
+            - SETGID
+            - SETUID
+          cleanCiliumState:
+            - NET_ADMIN
+            - SYS_ADMIN
+            - SYS_RESOURCE
+      # Answers ARP for LoadBalancer IPs so the pool is reachable on the LAN
+      # without BGP.
+      l2announcements:
+        enabled: true
+      # Leader election between announcing nodes is chatty against the API
+      # server.
+      k8sClientRateLimit:
+        qps: "{{ cilium_k8s_client_rate_limit.qps }}"
+        burst: "{{ cilium_k8s_client_rate_limit.burst }}"
+
+- name: Install the Cilium LB-IPAM + L2 announcement policy chart
+  kubernetes.core.helm:
+    kubeconfig: "{{ kubeconfig_path }}"
+    name: cilium-lb-ipam
+    chart_ref: "{{ role_path }}/files/charts/cilium-lb-ipam"
+    release_namespace: "{{ cilium_namespace }}"
+    wait: true
+    timeout: "{{ cilium_helm_timeout }}s"
+    values:
+      pool:
+        name: "{{ lb_ipam_pool_name }}"
+        start: "{{ load_balancer_ip_range.start }}"
+        stop: "{{ load_balancer_ip_range.stop }}"
+      l2Announcements:
+        interfaces: "{{ cilium_l2_announcement_interfaces }}"
+        announceOnControlPlane: "{{ cilium_l2_announce_on_control_plane }}"

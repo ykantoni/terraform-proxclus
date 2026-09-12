@@ -1,0 +1,68 @@
+---
+# GPU passthrough host configuration: vfio-pci binding for the RTX 5060 Ti's
+# PCI IDs, plus the BAR1-resize workaround service that must complete before
+# pve-guests.service starts. Equivalent to proxmox-host/ in the Terraform
+# project, which was plain unmanaged host config there too — this role is the
+# first time it's under configuration management at all.
+#
+# Runs on hosts in the `proxmox_hosts` group (today: jupiter).
+
+- name: Install vfio-pci module options
+  ansible.builtin.copy:
+    src: "{{ role_path }}/../../files/proxmox-host/vfio.conf"
+    dest: "{{ vfio_conf_path }}"
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+  register: vfio_conf
+  notify: update initramfs
+
+- name: Install BAR1-resize helper script
+  ansible.builtin.copy:
+    src: "{{ role_path }}/../../files/proxmox-host/resize-rtx5060ti-bar.sh"
+    dest: "{{ bar_resize_script_path }}"
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+
+- name: Install BAR1-resize systemd unit
+  ansible.builtin.copy:
+    src: "{{ role_path }}/../../files/proxmox-host/resize-rtx5060ti-bar.service"
+    dest: "{{ bar_resize_service_path }}"
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+  notify: reload systemd
+
+- name: Flush handlers so the unit file/systemd reload land before enabling it
+  ansible.builtin.meta: flush_handlers
+
+- name: Enable BAR1-resize service
+  ansible.builtin.systemd:
+    name: "{{ bar_resize_service_name }}"
+    enabled: true
+    daemon_reload: true
+  become: true
+
+- name: Warn that a host reboot is required for vfio.conf to take effect
+  ansible.builtin.debug:
+    msg: >-
+      vfio.conf changed but allow_host_reboot is false (the default) — the
+      GPU will not actually be rebound to vfio-pci until this host reboots.
+      Re-run with -e allow_host_reboot=true when you are ready, or reboot
+      the host by hand at a convenient time.
+  when:
+    - vfio_conf.changed
+    - not (allow_host_reboot | default(false) | bool)
+
+- name: Reboot host to apply vfio-pci binding (only with -e allow_host_reboot=true)
+  ansible.builtin.reboot:
+    reboot_timeout: 600
+    post_reboot_delay: 30
+  become: true
+  when:
+    - vfio_conf.changed
+    - allow_host_reboot | default(false) | bool

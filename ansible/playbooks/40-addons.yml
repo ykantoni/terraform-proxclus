@@ -1,0 +1,43 @@
+---
+# Equivalent to root addons.tf, including its depends_on ordering: cilium
+# first (everything else needs pod networking up), then longhorn/
+# metrics-server/nvidia-device-plugin (each only needs cilium), then
+# prometheus last (needs longhorn too, for its PVCs' StorageClass).
+#
+# Runs on the control node itself — these are Helm/Kubernetes API calls
+# against kubeconfig_path, not anything that touches a specific talos_nodes
+# host.
+- name: Install cluster addons
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Install Cilium
+      ansible.builtin.include_role:
+        name: addon_cilium
+      when: cni == 'cilium'
+      tags: [cilium]
+
+    - name: Install Longhorn
+      ansible.builtin.include_role:
+        name: addon_longhorn
+      when: enable_longhorn | bool
+      tags: [longhorn]
+
+    - name: Install metrics-server
+      ansible.builtin.include_role:
+        name: addon_metrics_server
+      when: enable_metrics_server | bool
+      tags: [metrics-server]
+
+    - name: Install nvidia-device-plugin (only when a node has pcigpu set)
+      ansible.builtin.include_role:
+        name: addon_nvidia_device_plugin
+      when: (groups['talos_nodes'] | map('extract', hostvars) | selectattr('pcigpu', 'defined') | list | length) > 0
+      tags: [nvidia-device-plugin]
+
+    - name: Install kube-prometheus-stack (needs Longhorn for its PVCs)
+      ansible.builtin.include_role:
+        name: addon_prometheus
+      when: enable_prometheus | bool
+      tags: [prometheus]

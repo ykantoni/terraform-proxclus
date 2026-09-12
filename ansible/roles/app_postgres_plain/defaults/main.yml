@@ -1,0 +1,14 @@
+---
+postgres_plain_roles:
+  - name: primary
+    namespace: "{{ postgres_plain_primary_namespace }}"
+    password: "{{ vault_postgres_plain_primary_password }}"
+    service_type: LoadBalancer
+    service_port: 5432
+  - name: standby
+    namespace: "{{ postgres_plain_standby_namespace }}"
+    password: "{{ vault_postgres_plain_standby_password }}"
+    service_type: LoadBalancer
+    service_port: 45432
+# postgres_plain_rendered_path lives in group_vars/all/vars.yml (teardown
+# playbooks reference it too, without invoking this role).

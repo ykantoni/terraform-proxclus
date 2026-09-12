@@ -1,0 +1,14 @@
+customization:
+    extraKernelArgs:
+        - -console
+        - console=tty0
+        - console=ttyS0
+    systemExtensions:
+        officialExtensions:
+            - siderolabs/iscsi-tools
+            - siderolabs/nvidia-container-toolkit-production
+            - siderolabs/nvidia-open-gpu-kernel-modules-production
+            - siderolabs/qemu-guest-agent
+            - siderolabs/util-linux-tools
+    bootloader: sd-boot
+

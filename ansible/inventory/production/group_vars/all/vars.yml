@@ -1,0 +1,146 @@
+# Cluster-wide configuration, mapped 1:1 from the Terraform project's
+# variables.tf defaults + terraform.tfvars (verified against both files).
+# Secrets referenced here (vault_*) live in vault.yml alongside this file.
+---
+# --- Proxmox connection ------------------------------------------------------
+# Needed both by proxmox_host_prep/proxmox_vm_template (which target the
+# `proxmox_hosts` group) and by proxmox_vm (which targets `talos_nodes` — one
+# play iteration per VM to create, each still talking to this same API), so
+# it lives here in `all` rather than in a proxmox_hosts-only file.
+proxmox_api_host: 192.168.1.15
+proxmox_endpoint: "https://192.168.1.15:8006/"
+proxmox_node: jupiter
+proxmox_validate_certs: false # matches Terraform's provider `insecure = true`
+
+datastore_id: sdc-storage
+bridge: vmbr0
+
+# VM template IDs vm-templates/build-template.sh produces and proxmox_vm
+# clones from: 9000 is the plain template, 9001 carries the NVIDIA system
+# extensions for GPU-passthrough nodes.
+template_vmid_common: 9000
+template_vmid_gpu: 9001
+
+cluster_name: proxclus
+talos_version: v1.13.8
+
+gateway: 192.168.1.1
+nameservers:
+  - 192.168.1.1
+  - 1.1.1.1
+
+controlplane_vip: 192.168.1.99
+
+# Public IP/hostname a router NATs through to controlplane_vip, added to the
+# Talos/Kubernetes API certificate SANs. Not treated as a secret in the
+# source Terraform project (it's a plain, non-sensitive variable default
+# there) so it stays here rather than in vault.yml — same posture, carried
+# over unchanged. Set to null to keep the cluster LAN-only.
+external_ip: "91.152.206.161"
+
+cni: cilium
+kube_prism_port: 7445
+
+# --- Addon enable flags + versions -----------------------------------------
+enable_longhorn: true
+longhorn_version: "1.8.1"
+longhorn_replica_count: 3
+longhorn_namespace: longhorn-system
+longhorn_data_path: /var/lib/longhorn
+
+enable_metrics_server: true
+metrics_server_version: "3.14.0"
+metrics_server_namespace: kube-system
+
+enable_prometheus: true
+kube_prometheus_stack_version: "90.0.0"
+monitoring_namespace: monitoring
+prometheus_storage_class: longhorn
+prometheus_storage_size: 20Gi
+prometheus_retention: 15d
+prometheus_service_type: LoadBalancer
+alertmanager_storage_size: 2Gi
+enable_grafana: true
+grafana_storage_size: 5Gi
+grafana_service_type: LoadBalancer
+# grafana_admin_password lives in vault.yml (vault_grafana_admin_password).
+
+cilium_version: "1.19.6"
+cilium_k8s_client_rate_limit:
+  qps: 50
+  burst: 100
+cilium_l2_announcement_interfaces:
+  - "^eth[0-9]+"
+cilium_l2_announce_on_control_plane: false
+lb_ipam_pool_name: default
+load_balancer_ip_range:
+  start: 192.168.1.60
+  stop: 192.168.1.98
+
+nvidia_device_plugin_version: "0.20.0"
+nvidia_device_plugin_namespace: kube-system
+nvidia_runtime_class_name: nvidia
+gpu_node_label: nvidia.com/gpu.present
+
+# --- Helm timeouts (seconds), matching each addon module's helm_timeout default
+cilium_helm_timeout: 900
+longhorn_helm_timeout: 600
+metrics_server_helm_timeout: 300
+nvidia_device_plugin_helm_timeout: 300
+prometheus_helm_timeout: 600
+
+# --- Talos bootstrap gates ---------------------------------------------------
+# Off because cp1, w2 and w3 never reach Talos stage "running": the NVIDIA
+# extensions in the shared image wait forever for a GPU those nodes do not
+# have, so the "all nodes finished boot sequence" check can never pass.
+# Kubernetes itself is unaffected. Turn back on once only GPU nodes carry the
+# NVIDIA extensions. (Same rationale as terraform.tfvars' wait_for_health.)
+wait_for_health: false
+wait_for_api: true
+api_wait_timeout: 300
+api_wait_interval: 5
+
+# --- Local paths on the control node -----------------------------------------
+talos_secrets_path: "{{ lookup('env', 'HOME') }}/.talos/{{ cluster_name }}/secrets.yaml"
+talos_gen_dir: "{{ lookup('env', 'HOME') }}/.talos/{{ cluster_name }}/gen"
+talos_rendered_dir: "{{ lookup('env', 'HOME') }}/.talos/{{ cluster_name }}/rendered"
+talosconfig_path: "{{ lookup('env', 'HOME') }}/talosconfig"
+kubeconfig_path: "{{ lookup('env', 'HOME') }}/.kube/config"
+
+# --- Apps ---------------------------------------------------------------
+ollama_namespace: ollama
+ollama_chart_version: "1.77.0"
+open_webui_chart_version: "16.0.0"
+ollama_gpu_enabled: true
+ollama_gpu_node_selector:
+  "{{ gpu_node_label }}": "true"
+ollama_gpu_count: 1
+ollama_models_to_pull: []
+ollama_storage_size: 20Gi
+ollama_storage_class: ""
+ollama_storage_path: /var/lib/ollama-models
+ollama_service_type: LoadBalancer
+webui_service_type: LoadBalancer
+webui_storage_size: 2Gi
+webui_storage_class: longhorn
+apps_helm_timeout: 600
+
+cnpg_operator_namespace: cnpg-system
+cnpg_operator_version: "0.23.2"
+cnpg_namespace: postgres
+cnpg_cluster_name: postgres
+cnpg_postgres_image: "ghcr.io/cloudnative-pg/postgresql:17.2"
+cnpg_instances: 2
+cnpg_storage_size: 10Gi
+cnpg_storage_class: longhorn
+cnpg_database_name: app
+cnpg_database_owner: app
+cnpg_helm_timeout: 300
+
+postgres_plain_primary_namespace: postgres-primary
+postgres_plain_standby_namespace: postgres-standby
+postgres_plain_storage_class: longhorn
+postgres_plain_storage_size: 10Gi
+postgres_plain_db: app
+postgres_plain_rendered_path: "{{ talos_gen_dir }}/postgres-primary-standby.rendered.yaml"
+# postgres_plain_user / passwords live in vault.yml.

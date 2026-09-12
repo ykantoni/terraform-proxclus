@@ -1,0 +1,19 @@
+---
+# Equivalent to `just t-destroy`.
+- name: Destroy Proxmox VM templates
+  hosts: proxmox_hosts
+  gather_facts: false
+  tasks:
+    - name: Destroy the plain template
+      ansible.builtin.command: "qm destroy {{ template_vmid_common }}"
+      become: true
+      register: destroy_common
+      changed_when: destroy_common.rc == 0
+      failed_when: destroy_common.rc != 0 and 'does not exist' not in destroy_common.stderr
+
+    - name: Destroy the GPU template
+      ansible.builtin.command: "qm destroy {{ template_vmid_gpu }}"
+      become: true
+      register: destroy_gpu
+      changed_when: destroy_gpu.rc == 0
+      failed_when: destroy_gpu.rc != 0 and 'does not exist' not in destroy_gpu.stderr

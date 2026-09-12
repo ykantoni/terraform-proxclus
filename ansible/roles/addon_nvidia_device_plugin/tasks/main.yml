@@ -1,0 +1,89 @@
+---
+# Equivalent to modules/addons/nvidia-device-plugin/main.tf. Only meaningful
+# when at least one node has `pcigpu` set — the playbook that includes this
+# role (playbooks/40-addons.yml) guards inclusion on that, matching
+# addons.tf's `count = length(local.gpu_node_ips) > 0 ? 1 : 0`.
+#
+# Which Kubernetes Node object corresponds to each GPU-mapped IP has to be
+# resolved at run time, the same way Terraform's data.kubernetes_nodes does:
+# host_vars knows each node's Proxmox name and static IP, but nothing pins
+# the Kubernetes Node name to either — Talos derives it from the node's
+# hostname, which this cluster never sets explicitly. Matching on the
+# InternalIP address Kubernetes itself reports sidesteps that guesswork.
+
+- name: Look up live Kubernetes Node objects
+  kubernetes.core.k8s_info:
+    kubeconfig: "{{ kubeconfig_path }}"
+    kind: Node
+  register: k8s_nodes
+
+- name: Determine each Kubernetes Node's InternalIP
+  ansible.builtin.set_fact:
+    node_internal_ips: >-
+      {{
+        node_internal_ips | default({}) | combine({
+          item.metadata.name: (item.status.addresses | selectattr('type', 'equalto', 'InternalIP') | map(attribute='address') | first)
+        })
+      }}
+  loop: "{{ k8s_nodes.resources }}"
+  loop_control:
+    label: "{{ item.metadata.name }}"
+
+- name: Invert to InternalIP -> Kubernetes Node name
+  ansible.builtin.set_fact:
+    node_name_by_ip: "{{ node_internal_ips | dict2items | items2dict(key_name='value', value_name='key') }}"
+
+- name: Resolve this cluster's GPU node IPs (from host_vars' pcigpu) to Kubernetes Node names
+  ansible.builtin.set_fact:
+    gpu_node_ips: "{{ groups['talos_nodes'] | map('extract', hostvars) | selectattr('pcigpu', 'defined') | map(attribute='ip') | list }}"
+
+- name: Resolve GPU node names
+  ansible.builtin.set_fact:
+    gpu_node_k8s_names: "{{ gpu_node_ips | map('extract', node_name_by_ip) | list }}"
+
+- name: Registers the "nvidia" containerd runtime (siderolabs/nvidia-container-toolkit extension) as a RuntimeClass
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    state: present
+    definition:
+      apiVersion: node.k8s.io/v1
+      kind: RuntimeClass
+      metadata:
+        name: "{{ nvidia_runtime_class_name }}"
+      handler: "{{ nvidia_runtime_class_name }}"
+
+# The device plugin chart has no built-in way to target only GPU nodes
+# (normally Node Feature Discovery's job); labelling the nodes this role
+# already knows have a GPU and feeding the same label back in as the chart's
+# nodeSelector gets the same result without pulling in NFD.
+- name: Label each GPU node
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    state: present
+    # Node already exists — the module patches just the fields given here
+    # (a strategic merge against the live object) rather than replacing it,
+    # the same way Terraform's kubernetes_labels resource only touches
+    # metadata.labels.
+    definition:
+      apiVersion: v1
+      kind: Node
+      metadata:
+        name: "{{ item }}"
+        labels:
+          "{{ gpu_node_label }}": "true"
+  loop: "{{ gpu_node_k8s_names }}"
+
+- name: Install nvidia-device-plugin
+  kubernetes.core.helm:
+    kubeconfig: "{{ kubeconfig_path }}"
+    name: nvidia-device-plugin
+    chart_ref: nvidia-device-plugin
+    chart_repo_url: "https://nvidia.github.io/k8s-device-plugin"
+    chart_version: "{{ nvidia_device_plugin_version }}"
+    release_namespace: "{{ nvidia_device_plugin_namespace }}"
+    wait: true
+    timeout: "{{ nvidia_device_plugin_helm_timeout }}s"
+    values:
+      runtimeClassName: "{{ nvidia_runtime_class_name }}"
+      nodeSelector:
+        "{{ gpu_node_label }}": "true"

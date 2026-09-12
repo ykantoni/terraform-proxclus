@@ -1,0 +1,10 @@
+---
+# Full end-to-end bootstrap, in the same order the Terraform project's
+# module dependency graph enforced: proxmox host prep -> VM templates -> VM
+# provisioning -> Talos bootstrap -> addons -> apps.
+- ansible.builtin.import_playbook: 00-proxmox-host-prep.yml
+- ansible.builtin.import_playbook: 10-build-templates.yml
+- ansible.builtin.import_playbook: 20-provision-vms.yml
+- ansible.builtin.import_playbook: 30-bootstrap-talos.yml
+- ansible.builtin.import_playbook: 40-addons.yml
+- ansible.builtin.import_playbook: 50-apps.yml

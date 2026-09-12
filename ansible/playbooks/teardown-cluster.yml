@@ -1,0 +1,30 @@
+---
+# Reverse of 20-provision-vms.yml: stop then delete every Talos VM. Run
+# teardown-addons.yml first (Longhorn's delete-protection needs a live
+# cluster to patch).
+- name: Destroy Talos VMs
+  hosts: talos_nodes
+  gather_facts: false
+  tasks:
+    - name: Stop the Talos VM (Terraform's stop_on_destroy equivalent)
+      community.proxmox.proxmox_kvm:
+        api_host: "{{ proxmox_api_host }}"
+        api_user: "{{ vault_proxmox_api_token_id.split('!')[0] }}"
+        api_token_id: "{{ vault_proxmox_api_token_id.split('!')[1] }}"
+        api_token_secret: "{{ vault_proxmox_api_token_secret }}"
+        validate_certs: "{{ proxmox_validate_certs }}"
+        node: "{{ proxmox_node }}"
+        vmid: "{{ vm_id }}"
+        state: stopped
+        timeout: 60
+
+    - name: Remove the Talos VM
+      community.proxmox.proxmox_kvm:
+        api_host: "{{ proxmox_api_host }}"
+        api_user: "{{ vault_proxmox_api_token_id.split('!')[0] }}"
+        api_token_id: "{{ vault_proxmox_api_token_id.split('!')[1] }}"
+        api_token_secret: "{{ vault_proxmox_api_token_secret }}"
+        validate_certs: "{{ proxmox_validate_certs }}"
+        node: "{{ proxmox_node }}"
+        vmid: "{{ vm_id }}"
+        state: absent

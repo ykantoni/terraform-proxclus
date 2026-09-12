@@ -1,0 +1,24 @@
+---
+# Equivalent to apps/ — each app is independent of the others, same
+# "independent by convention, not tooling" contract apps/README.md documents
+# in the Terraform project. Run the whole play, or just one app with
+# --tags ollama / postgres-cnpg / postgres-plain.
+- name: Install applications
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Install Ollama + Open WebUI
+      ansible.builtin.include_role:
+        name: app_ollama
+      tags: [ollama]
+
+    - name: Install CloudNativePG operator + Cluster
+      ansible.builtin.include_role:
+        name: app_postgres_cnpg
+      tags: [postgres-cnpg]
+
+    - name: Install plain Postgres primary/standby
+      ansible.builtin.include_role:
+        name: app_postgres_plain
+      tags: [postgres-plain]

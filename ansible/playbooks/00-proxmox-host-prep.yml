@@ -1,0 +1,8 @@
+---
+# Equivalent to proxmox-host/ in the Terraform project (never itself
+# Terraform-managed) — GPU vfio-pci binding + BAR1-resize workaround.
+- name: Prepare Proxmox host(s) for GPU passthrough
+  hosts: proxmox_hosts
+  gather_facts: true
+  roles:
+    - proxmox_host_prep

@@ -1,0 +1,18 @@
+---
+# terraform_data.wait_for_api equivalent. Deliberately accepts a 401: this
+# cluster's API server has anonymous auth disabled, so every endpoint
+# (/version included) answers 401 even once fully up — any HTTP response at
+# all proves the API server is listening; only a connection-level failure
+# (nothing listening yet) should count as "not ready". No kubeconfig needed
+# for this probe.
+
+- name: Wait for the Kubernetes API to answer
+  ansible.builtin.uri:
+    url: "https://{{ controlplane_vip }}:6443/version"
+    method: GET
+    validate_certs: false
+    status_code: [200, 401]
+  register: api_check
+  until: api_check.status is defined and api_check.status in [200, 401]
+  retries: "{{ (api_wait_timeout | int / api_wait_interval | int) | round(0, 'ceil') | int }}"
+  delay: "{{ api_wait_interval }}"

@@ -1,0 +1,10 @@
+# Mapped 1:1 from terraform.tfvars' nodes.worker3.
+---
+vm_id: 10003
+node_name: w3
+ip: 192.168.1.204
+cidr: 24
+mac: "BC:24:11:00:01:04"
+cores: 4
+memory: 8192
+disk: 50

@@ -1,0 +1,15 @@
+# Install with: ansible-galaxy collection install -r requirements.yml
+---
+collections:
+  # Proxmox VE VM lifecycle (clone/configure/destroy) — roles/proxmox_vm,
+  # playbooks/teardown-cluster.yml. Successor to community.general's now
+  # deprecated proxmox_kvm et al.; verify roles/proxmox_vm/tasks/main.yml's
+  # module-parameter comment against whatever version you pin here.
+  - name: community.proxmox
+    version: ">=1.3.0"
+
+  # kubernetes.core.helm / k8s / k8s_info / k8s_json_patch — every addon and
+  # app role, plus the GPU-node lookup and teardown-addons.yml's Longhorn
+  # patch, are built on these.
+  - name: kubernetes.core
+    version: ">=3.0.0"

@@ -1,0 +1,9 @@
+---
+# Equivalent to modules/proxmox-talos-vm. Iterates the talos_nodes group,
+# each host cloning/configuring itself on the Proxmox API (ansible_connection:
+# local — see inventory/production/hosts.yml).
+- name: Clone and configure Talos VMs on Proxmox
+  hosts: talos_nodes
+  gather_facts: false
+  roles:
+    - proxmox_vm

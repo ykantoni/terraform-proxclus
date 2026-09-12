@@ -1,0 +1,6 @@
+---
+# Only needed true for a genuinely fresh/never-configured node (Talos
+# "maintenance mode", no cert issued yet) — e.g. `-e talos_apply_insecure=true`
+# on a brand-new cluster's very first apply. Leave false once nodes already
+# have a machine config applied.
+talos_apply_insecure: false

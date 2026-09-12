@@ -1,0 +1,23 @@
+# Vault password (never commit this — see README.md's "Vault setup")
+.vault-pass
+
+# The real secrets file, once created from vault.yml.example and encrypted
+# with ansible-vault — vault.yml.example itself (placeholders only) IS
+# committed.
+inventory/production/group_vars/all/vault.yml
+
+# Generated Talos/Kubernetes credentials (same convention as the Terraform
+# project's own gitignored kubeconfig/.kube/config/talosconfig)
+.kube/
+kubeconfig
+talosconfig
+*.talosconfig
+
+# Rendered per-node machine configs and the Talos secrets bundle, if ever
+# staged locally instead of under ~/.talos/
+rendered/
+secrets.yaml
+
+# Ansible runtime noise
+*.retry
+.ansible/

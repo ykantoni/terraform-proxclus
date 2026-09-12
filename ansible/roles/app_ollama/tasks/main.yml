@@ -1,0 +1,146 @@
+---
+# Equivalent to apps/ollama/main.tf. Independent of the addon plays once the
+# cluster and nvidia-device-plugin (if GPU-enabled) are up — same
+# "independent app, runtime dependency only" contract apps/README.md
+# documents for the Terraform version.
+
+- name: Create the ollama namespace
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Namespace
+      metadata:
+        name: "{{ ollama_namespace }}"
+
+# Same rationale as apps/postgres-cnpg's README already flags: the
+# platform's own "longhorn" StorageClass replicates 3x, which this cluster's
+# small VM disks can't fit a many-GB model cache into across 3 nodes at once.
+# Models are re-downloadable, so a plain directory on the GPU node's own
+# filesystem, statically provisioned as a "local" PV, is simpler and cheaper
+# than paying for Longhorn's engine overhead on top of the same node's disk.
+- name: Create the ollama-local no-provisioner StorageClass
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    state: present
+    definition:
+      apiVersion: storage.k8s.io/v1
+      kind: StorageClass
+      metadata:
+        name: ollama-local
+      provisioner: kubernetes.io/no-provisioner
+      reclaimPolicy: Retain
+      # "local" volumes bind only after a pod that needs them is scheduled —
+      # the scheduler is what actually evaluates the PV's nodeAffinity below.
+      # With Immediate binding the PVC could bind before the pod exists,
+      # ignoring the node the volume is pinned to.
+      volumeBindingMode: WaitForFirstConsumer
+      allowVolumeExpansion: false
+  when: ollama_storage_class == ""
+
+# Statically provisioned: "local" volumes have no dynamic provisioner, so
+# this PV — and the directory it points at on the GPU node — must exist
+# before the chart's PVC can bind. That directory also needs to be one the
+# kubelet's mount namespace exposes to pods on Talos, via the
+# ollama-models-mounts patch applied only to GPU nodes — see
+# roles/talos_bootstrap/tasks/apply_config.yml.
+- name: Create the statically-provisioned "local" PV for pulled models
+  kubernetes.core.k8s:
+    kubeconfig: "{{ kubeconfig_path }}"
+    state: present
+    definition:
+      apiVersion: v1
+      kind: PersistentVolume
+      metadata:
+        name: ollama-models
+      spec:
+        capacity:
+          storage: "{{ ollama_storage_size }}"
+        accessModes: [ReadWriteOnce]
+        persistentVolumeReclaimPolicy: Retain
+        storageClassName: "{{ 'ollama-local' if ollama_storage_class == '' else ollama_storage_class }}"
+        local:
+          path: "{{ ollama_storage_path }}"
+        # Pins this PV to whichever node carries the GPU label — the same
+        # label addon_nvidia_device_plugin applies — since a "local" volume's
+        # data only exists on that one node's disk.
+        nodeAffinity:
+          required:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: "{{ gpu_node_label }}"
+                    operator: In
+                    values: ["true"]
+  when: ollama_gpu_enabled | bool
+
+- name: Compute Ollama's base Helm values
+  ansible.builtin.set_fact:
+    ollama_base_values:
+      ollama:
+        gpu:
+          enabled: "{{ ollama_gpu_enabled }}"
+          type: nvidia
+          number: "{{ ollama_gpu_count }}"
+        models:
+          pull: "{{ ollama_models_to_pull }}"
+      service:
+        type: "{{ ollama_service_type }}"
+        port: 11434
+      persistentVolume:
+        enabled: true
+        size: "{{ ollama_storage_size }}"
+        storageClass: "{{ 'ollama-local' if ollama_storage_class == '' else ollama_storage_class }}"
+
+# An empty runtimeClassName/nodeSelector is how the chart already spells "no
+# GPU targeting", so gpu_enabled=false needs nothing more than that.
+- name: Compute Ollama's GPU-scheduling values
+  ansible.builtin.set_fact:
+    ollama_gpu_values: "{{ {'runtimeClassName': nvidia_runtime_class_name, 'nodeSelector': ollama_gpu_node_selector} if ollama_gpu_enabled | bool else {'runtimeClassName': '', 'nodeSelector': {}} }}"
+
+- name: Install Ollama
+  kubernetes.core.helm:
+    kubeconfig: "{{ kubeconfig_path }}"
+    name: ollama
+    chart_ref: ollama
+    chart_repo_url: "https://otwld.github.io/ollama-helm/"
+    chart_version: "{{ ollama_chart_version }}"
+    release_namespace: "{{ ollama_namespace }}"
+    wait: true
+    timeout: "{{ apps_helm_timeout }}s"
+    values: "{{ ollama_base_values | combine(ollama_gpu_values) }}"
+
+# helm_release.ollama's release name equals the chart name ("ollama"), so the
+# chart's fullname helper collapses to just "ollama" — that's the Service
+# name Open WebUI is pointed at below.
+- name: Install Open WebUI
+  kubernetes.core.helm:
+    kubeconfig: "{{ kubeconfig_path }}"
+    name: open-webui
+    chart_ref: open-webui
+    chart_repo_url: "https://helm.openwebui.com/"
+    chart_version: "{{ open_webui_chart_version }}"
+    release_namespace: "{{ ollama_namespace }}"
+    wait: true
+    timeout: "{{ apps_helm_timeout }}s"
+    values:
+      # Open WebUI bundles its own Ollama subchart by default; this stack
+      # brings its own release instead (the one above, with GPU scheduling),
+      # so the bundled one is disabled and pointed at that release's Service.
+      ollama:
+        enabled: false
+      ollamaUrls:
+        - "http://ollama.{{ ollama_namespace }}.svc.cluster.local:11434"
+      service:
+        type: "{{ webui_service_type }}"
+      persistence:
+        enabled: true
+        size: "{{ webui_storage_size }}"
+        storageClass: "{{ webui_storage_class }}"
+      # A single Open WebUI replica needs no external state for websockets;
+      # skipping Redis avoids a dependency this stack would otherwise have to
+      # manage the lifecycle of for no benefit at replica=1.
+      websocket:
+        manager: ""
+        redis:
+          enabled: false

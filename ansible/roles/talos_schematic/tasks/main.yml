@@ -1,0 +1,56 @@
+---
+# Replaces schematic.tf: POSTs each customization-*.yaml body to the Talos
+# Image Factory and records the resulting installer schematic IDs. Consumed
+# by talos_bootstrap's per-node install.image patch, and independently by
+# proxmox_vm_template's own call to the same endpoint (the two aren't wired
+# together the way Terraform's schematic.tf feeds both consumers from one
+# resource — customization-*.yaml stays the single edited source of truth for
+# both, exactly as it does today).
+#
+# A schematic ID is a pure hash of the request body, so this is safe to
+# re-run every time — no idempotency guard needed, unlike almost everything
+# else in this project.
+#
+# Meant to run once, with `hosts: localhost` (see playbooks/30-bootstrap-talos.yml),
+# ahead of the per-node play. Its result is handed off via a small YAML file
+# rather than cross-host fact broadcasting, since talos_nodes hosts run with
+# ansible_connection: local and each iterate independently.
+
+- name: Ensure the local Talos working directory exists
+  ansible.builtin.file:
+    path: "{{ talos_gen_dir }}"
+    state: directory
+    mode: "0700"
+
+- name: Fetch the common (no-GPU) installer schematic ID
+  ansible.builtin.uri:
+    url: "{{ talos_factory_url }}"
+    method: POST
+    body: "{{ lookup('file', role_path + '/../../files/talos/customization-common.yaml') }}"
+    body_format: raw
+    headers:
+      Content-Type: application/x-yaml
+    return_content: true
+    status_code: [200, 201]
+  register: schematic_common
+
+- name: Fetch the GPU installer schematic ID
+  ansible.builtin.uri:
+    url: "{{ talos_factory_url }}"
+    method: POST
+    body: "{{ lookup('file', role_path + '/../../files/talos/customization-gpu.yaml') }}"
+    body_format: raw
+    headers:
+      Content-Type: application/x-yaml
+    return_content: true
+    status_code: [200, 201]
+  register: schematic_gpu
+
+- name: Record both schematic IDs for the per-node play to pick up
+  ansible.builtin.copy:
+    dest: "{{ schematic_ids_file }}"
+    mode: "0600"
+    content: |
+      ---
+      talos_schematic_id_common: "{{ (schematic_common.content | from_json).id }}"
+      talos_schematic_id_gpu: "{{ (schematic_gpu.content | from_json).id }}"

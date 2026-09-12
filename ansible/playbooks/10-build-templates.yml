@@ -1,0 +1,8 @@
+---
+# Equivalent to `just t-create` — builds Proxmox VM templates 9000 (plain)
+# and 9001 (GPU) from the Talos Image Factory.
+- name: Build Proxmox VM templates
+  hosts: proxmox_hosts
+  gather_facts: true
+  roles:
+    - proxmox_vm_template

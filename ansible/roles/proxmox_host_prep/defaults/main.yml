@@ -1,0 +1,10 @@
+---
+# Never reboot automatically — vfio.conf only takes effect after a reboot,
+# and rebooting a hypervisor is destructive to whatever it's currently
+# running. Pass `-e allow_host_reboot=true` when you are actually ready.
+allow_host_reboot: false
+
+vfio_conf_path: /etc/modprobe.d/vfio.conf
+bar_resize_script_path: /usr/local/sbin/resize-rtx5060ti-bar.sh
+bar_resize_service_path: /etc/systemd/system/resize-rtx5060ti-bar.service
+bar_resize_service_name: resize-rtx5060ti-bar.service
