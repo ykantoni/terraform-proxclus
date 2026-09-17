@@ -91,6 +91,13 @@ client needs its own `talosconfig`/`kubeconfig` with the endpoint changed to
 `external_ip` — see `modules/talos-cluster/README.md`'s "External access"
 section.
 
+`enable_hubble_ui = true` (the default) installs Hubble Relay and Hubble UI
+alongside Cilium: a web dashboard of the CNI's live traffic (service map,
+L3/L4/L7 flows, DNS, policy verdicts). It gets its own LoadBalancer address
+from the same pool, controlled by `hubble_ui_service_type`. Touches no machine
+configuration and needs no reboot. See `modules/addons/cilium/README.md`'s
+"Hubble" section for what the module sets.
+
 ## Storage
 
 `enable_longhorn = true` installs Longhorn and makes its `longhorn`

@@ -74,6 +74,18 @@ variable "kube_prism_port" {
   default     = 7445
 }
 
+variable "enable_hubble_ui" {
+  description = "Install Hubble Relay + Hubble UI behind Cilium, giving a web dashboard of live CNI traffic (service map, policy verdicts, DNS, L7 flows). Touches no machine configuration and needs no reboot, so it defaults on. Ignored when cni != \"cilium\"."
+  type        = bool
+  default     = true
+}
+
+variable "hubble_ui_service_type" {
+  description = "Kubernetes Service type Hubble UI's web UI is exposed as. LoadBalancer (the default) gets an address from Cilium's load_balancer_ip_range, since this cluster runs no ingress controller; see the root README's \"Networking\" section."
+  type        = string
+  default     = "LoadBalancer"
+}
+
 variable "wait_for_health" {
   description = "Health check the cluster before installing addons. Turn off to plan against a cluster that is down."
   type        = bool

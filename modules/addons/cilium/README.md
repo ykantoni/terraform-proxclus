@@ -42,6 +42,18 @@ address without hosting a backend still attracts the traffic.
 Services pick up an address automatically. To request a specific one, set
 `spec.loadBalancerIP` or the `io.cilium/lb-ipam-ips` annotation.
 
+## Hubble
+
+`enable_hubble_ui = true` (the default) turns on Hubble Relay and Hubble UI,
+giving a web dashboard of the CNI's live traffic: the service map, L3/L4/L7
+flows, DNS, and policy verdicts. Flow visibility itself (`hubble.enabled`) is
+already on by default in the chart; Relay aggregates every agent's flow feed,
+and the UI is the dashboard that talks to Relay.
+
+`hubble_ui_service_type` (default `LoadBalancer`) controls how the UI is
+exposed, the same as `lb_ipam_range` covers the rest of the cluster's
+LoadBalancer services — see the root README's "Networking" section.
+
 ## Inputs
 
 - `lb_ipam_range` — object with `start` and `stop` (required)
@@ -51,6 +63,8 @@ Services pick up an address automatically. To request a specific one, set
 - `l2_announcement_interfaces`
 - `l2_announce_on_control_plane`
 - `k8s_client_rate_limit`
+- `enable_hubble_ui`
+- `hubble_ui_service_type`
 - `cilium_extra_values`
 - `helm_timeout`
 

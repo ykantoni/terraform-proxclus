@@ -20,9 +20,11 @@ module "cilium" {
 
   count = var.cni == "cilium" ? 1 : 0
 
-  cilium_version   = var.cilium_version
-  k8s_service_port = var.kube_prism_port
-  lb_ipam_range    = var.load_balancer_ip_range
+  cilium_version         = var.cilium_version
+  k8s_service_port       = var.kube_prism_port
+  lb_ipam_range          = var.load_balancer_ip_range
+  enable_hubble_ui       = var.enable_hubble_ui
+  hubble_ui_service_type = var.hubble_ui_service_type
 
   depends_on = [
     module.talos_cluster,

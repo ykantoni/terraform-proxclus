@@ -66,6 +66,18 @@ variable "k8s_client_rate_limit" {
   }
 }
 
+variable "enable_hubble_ui" {
+  description = "Install Hubble Relay and Hubble UI, giving a web dashboard of live CNI traffic (service map, policy verdicts, DNS, L7). Touches no machine configuration and needs no reboot."
+  type        = bool
+  default     = true
+}
+
+variable "hubble_ui_service_type" {
+  description = "Kubernetes Service type Hubble UI's web UI (port 80) is exposed as. LoadBalancer (the default) gets an address from Cilium's load_balancer_ip_range, since this cluster runs no ingress controller; see the root README's \"Networking\" section."
+  type        = string
+  default     = "LoadBalancer"
+}
+
 variable "cilium_extra_values" {
   description = "Extra Cilium Helm values merged over the defaults, for example to enable Hubble"
   type        = any

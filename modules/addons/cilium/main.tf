@@ -60,6 +60,23 @@ locals {
       qps   = var.k8s_client_rate_limit.qps
       burst = var.k8s_client_rate_limit.burst
     }
+
+    # Relay aggregates every agent's flow feed; the UI is the web dashboard
+    # that talks to Relay. Both ride on hubble.enabled's flow visibility,
+    # which is on by default in the chart.
+    hubble = {
+      relay = {
+        enabled = var.enable_hubble_ui
+      }
+
+      ui = {
+        enabled = var.enable_hubble_ui
+
+        service = {
+          type = var.hubble_ui_service_type
+        }
+      }
+    }
   }
 }
 
