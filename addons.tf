@@ -81,12 +81,29 @@ module "prometheus" {
 
   kube_prometheus_stack_version = var.kube_prometheus_stack_version
   grafana_admin_password        = var.grafana_admin_password
+  controlplane_ips              = module.talos_cluster.controlplane_ips
 
   # Same CNI reasoning as module.longhorn and module.metrics_server. Also
   # waits on module.longhorn directly: this module's PVCs (storage_class
   # defaults to "longhorn") need Longhorn's CSI controller actually running
   # to provision, not just its own helm_release having eventually turned
   # Ready under this module's separate wait=true.
+  depends_on = [
+    module.talos_cluster,
+    module.cilium,
+    module.longhorn,
+    local_sensitive_file.kubeconfig,
+  ]
+}
+
+module "loki" {
+  source = "./modules/addons/loki"
+
+  count = var.enable_loki ? 1 : 0
+
+  # Same CNI/storage reasoning as module.prometheus: Promtail's DaemonSet
+  # needs pod networking up, and Loki's PVC needs Longhorn's CSI controller
+  # actually running to provision.
   depends_on = [
     module.talos_cluster,
     module.cilium,

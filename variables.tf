@@ -147,6 +147,12 @@ variable "grafana_admin_password" {
   sensitive   = true
 }
 
+variable "enable_loki" {
+  description = "Install Loki (single-binary, filesystem storage) and Promtail, for centralized log aggregation queryable from Grafana. Its PVC defaults to the \"longhorn\" StorageClass (see modules/addons/loki's storage_class default), so this needs enable_longhorn = true too. Touches no machine configuration and needs no reboot on its own."
+  type        = bool
+  default     = false
+}
+
 variable "nvidia_device_plugin_version" {
   description = "nvidia-device-plugin Helm chart version. Only installed when at least one node in var.nodes sets pcigpu; see modules/addons/nvidia-device-plugin."
   type        = string

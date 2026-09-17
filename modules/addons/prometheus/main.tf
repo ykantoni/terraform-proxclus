@@ -22,6 +22,25 @@ resource "kubernetes_namespace" "monitoring" {
 
 locals {
   kube_prometheus_stack_values = {
+    # Talos runs etcd, the scheduler and the controller-manager as host-level
+    # processes, not kubeadm-style labelled static pods, so the chart's
+    # default Service selector for each never matches a pod and its
+    # Endpoints stay empty — "If your etcd is not deployed as a pod, specify
+    # IPs it can be found on" is the chart's own values.yaml comment for
+    # exactly this, and kubeScheduler/kubeControllerManager both have the
+    # identical override.
+    kubeEtcd = {
+      endpoints = var.controlplane_ips
+    }
+
+    kubeScheduler = {
+      endpoints = var.controlplane_ips
+    }
+
+    kubeControllerManager = {
+      endpoints = var.controlplane_ips
+    }
+
     prometheus = {
       prometheusSpec = {
         retention = var.prometheus_retention
@@ -80,9 +99,47 @@ locals {
       enabled       = var.enable_grafana
       adminPassword = var.grafana_admin_password
 
+      # The dashboards sidecar already scans every namespace by the chart's
+      # own default; the datasources sidecar's default is the release
+      # namespace only, so any addon (e.g. modules/addons/loki) that ships a
+      # data source ConfigMap from its own namespace would otherwise go
+      # unnoticed.
+      sidecar = {
+        datasources = {
+          searchNamespace = "ALL"
+        }
+      }
+
       service = {
         type = var.grafana_service_type
       }
+
+      # Grafana runs as a Deployment, not a StatefulSet, but its PVC is still
+      # ReadWriteOnce. The chart's default RollingUpdate strategy tries to
+      # start the replacement pod before killing the old one; with only one
+      # replica and an RWO volume, the new pod can never attach it (Multi-
+      # Attach error) and the rollout deadlocks forever. Recreate kills the
+      # old pod first, so the new one can actually mount the volume.
+      deploymentStrategy = {
+        type = "Recreate"
+      }
+
+      # Grafana's container runs with readOnlyRootFilesystem: true. Its
+      # background plugin-update pass (on by default in this chart's app
+      # version) still tries to self-update bundled plugins under
+      # /usr/share/grafana/data/plugins-bundled on every startup — including
+      # ones this cluster actually needs, like prometheus and loki. It kills
+      # the running plugin process first, then fails to write the
+      # replacement ("read-only file system"), permanently breaking that
+      # plugin for the pod's lifetime. A writable emptyDir at just this path
+      # lets the update pass actually succeed, without loosening
+      # readOnlyRootFilesystem anywhere else.
+      extraEmptyDirMounts = [
+        {
+          name      = "plugins-bundled"
+          mountPath = "/usr/share/grafana/data/plugins-bundled"
+        }
+      ]
 
       persistence = {
         enabled          = true

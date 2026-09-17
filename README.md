@@ -143,6 +143,21 @@ privileged-namespace label node-exporter needs, and why
 `serviceMonitorSelectorNilUsesHelmValues` (and its `podMonitor`/`rule`
 equivalents) are turned off.
 
+## Logging
+
+`enable_loki = true` (default `false`) installs
+[Loki](https://github.com/grafana/loki) as a single binary with filesystem
+storage, plus Promtail as a log-shipping DaemonSet on every node. Its PVC
+defaults to the `longhorn` StorageClass, so it also needs `enable_longhorn =
+true`; unlike Longhorn itself, turning it on touches no machine configuration
+and needs no reboot.
+
+When `enable_prometheus` is also on, Loki gets auto-added as a Grafana data
+source via the same k8s-sidecar mechanism `modules/addons/prometheus` uses
+for dashboards — query logs from Grafana's Explore tab, no separate UI to
+expose. See `modules/addons/loki/README.md` for why it runs single-binary
+instead of the chart's distributed default, and how retention is configured.
+
 ## GPU
 
 Setting `pcigpu` on a node in `var.nodes` passes that PCI device through to
@@ -178,12 +193,13 @@ cluster uses two independent gates, both in `modules/talos-cluster`:
   once per cluster lifetime (a fresh build after `terraform destroy`
   re-triggers it) and needs `curl` on the machine running `terraform apply`.
 
-Cilium, Longhorn, metrics-server, Prometheus, and the NVIDIA device plugin all
-depend on `module.talos_cluster` as a whole, which is enough: a module-level
-`depends_on` waits on every resource inside that module,
+Cilium, Longhorn, metrics-server, Prometheus, Loki, and the NVIDIA device
+plugin all depend on `module.talos_cluster` as a whole, which is enough: a
+module-level `depends_on` waits on every resource inside that module,
 `terraform_data.wait_for_api` included, with no extra wiring needed in
-`addons.tf`. Prometheus additionally depends on `module.longhorn` directly,
-since its PVCs need Longhorn's CSI controller actually running to provision.
+`addons.tf`. Prometheus and Loki additionally depend on `module.longhorn`
+directly, since their PVCs need Longhorn's CSI controller actually running to
+provision.
 
 The Kubernetes-level checks stay enabled deliberately, because they are the only
 ones that prove the API server answers requests. Talos skips the two that cannot

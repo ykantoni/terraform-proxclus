@@ -16,7 +16,8 @@ locals {
     # siderolabs/iscsi-tools and siderolabs/util-linux-tools extensions in
     # customization.yaml, not from anything this chart installs.
     defaultSettings = {
-      defaultDataPath = var.data_path
+      defaultDataPath                   = var.data_path
+      storageOverProvisioningPercentage = var.storage_over_provisioning_percentage
     }
   }
 }

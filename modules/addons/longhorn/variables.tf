@@ -22,6 +22,12 @@ variable "replica_count" {
   default     = 3
 }
 
+variable "storage_over_provisioning_percentage" {
+  description = "How far Longhorn can reserve space for volumes beyond a disk's raw capacity, since replicas are thin-provisioned and most workloads use far less than their requested size. 100 (the chart's own default) reserves each volume's full requested size against every disk's raw capacity with zero slack, so nominal reservations alone can exhaust a small cluster's scheduling budget long before any disk is actually full — worse, on nodes this small, once Longhorn's own storage-reserved-percentage-for-default-disk carve-out (30% of each disk, off limits regardless of this setting) is subtracted first. Real free space is still protected independently by storage-minimal-available-percentage."
+  type        = number
+  default     = 300
+}
+
 variable "longhorn_extra_values" {
   description = "Extra Longhorn Helm values merged over the defaults"
   type        = any
