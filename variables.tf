@@ -147,10 +147,22 @@ variable "grafana_admin_password" {
   sensitive   = true
 }
 
-variable "nvidia_device_plugin_version" {
-  description = "nvidia-device-plugin Helm chart version. Only installed when at least one node in var.nodes sets pcigpu; see modules/addons/nvidia-device-plugin."
+variable "gpu_operator_version" {
+  description = "NVIDIA GPU Operator Helm chart version. Only installed when at least one node in var.nodes sets pcigpu; see modules/addons/gpu-operator."
   type        = string
-  default     = "0.20.0"
+  default     = "v26.7.0"
+}
+
+variable "enable_dcgm_exporter" {
+  description = "Install dcgm-exporter (GPU metrics) alongside the GPU Operator. See modules/addons/gpu-operator."
+  type        = bool
+  default     = true
+}
+
+variable "enable_gfd" {
+  description = "Install GPU Feature Discovery alongside the GPU Operator. See modules/addons/gpu-operator."
+  type        = bool
+  default     = false
 }
 
 variable "load_balancer_ip_range" {

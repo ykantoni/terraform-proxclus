@@ -95,21 +95,28 @@ module "prometheus" {
   ]
 }
 
-module "nvidia_device_plugin" {
-  source = "./modules/addons/nvidia-device-plugin"
+module "gpu_operator" {
+  source = "./modules/addons/gpu-operator"
 
   count = length(local.gpu_node_ips) > 0 ? 1 : 0
 
-  gpu_node_ips                 = local.gpu_node_ips
-  nvidia_device_plugin_version = var.nvidia_device_plugin_version
+  gpu_node_ips         = local.gpu_node_ips
+  gpu_operator_version = var.gpu_operator_version
+  enable_dcgm_exporter = var.enable_dcgm_exporter
+  enable_gfd           = var.enable_gfd
+  enable_prometheus    = var.enable_prometheus
 
-  # Same reasoning as module.longhorn: needs pod networking up, which
-  # module.talos_cluster's own health check only guarantees when cni is
-  # flannel, so it also waits on module.cilium's helm_release when cni is
-  # cilium.
+  # Same CNI reasoning as module.longhorn and module.metrics_server. Also
+  # waits on module.prometheus directly (bare reference, valid at count 0 the
+  # same way module.longhorn is referenced elsewhere in this file): when
+  # enable_dcgm_exporter and enable_prometheus are both true, this module's
+  # ServiceMonitor needs the Prometheus Operator's CRD for it to already
+  # exist, not just that module's own helm_release having eventually turned
+  # Ready under this module's separate wait=true.
   depends_on = [
     module.talos_cluster,
     module.cilium,
+    module.prometheus,
     local_sensitive_file.kubeconfig,
   ]
 }

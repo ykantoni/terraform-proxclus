@@ -1,5 +1,5 @@
 output "runtime_class_name" {
-  value = kubernetes_runtime_class_v1.nvidia.metadata[0].name
+  value = var.runtime_class_name
 }
 
 output "gpu_node_names" {

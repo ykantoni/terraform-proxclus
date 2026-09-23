@@ -150,18 +150,28 @@ the VM (see `modules/proxmox-talos-vm`), boots it from the GPU image
 schematic instead of the common one, and loads the NVIDIA kernel modules
 (see `schematic.tf` and `modules/talos-cluster/patches/nvidia-modules.patch.yaml`).
 Nothing else needs flipping: as soon as any node sets `pcigpu`,
-`module.nvidia_device_plugin` installs the NVIDIA device plugin so that
-node's GPU shows up as an `nvidia.com/gpu` resource for Kubernetes to
-schedule against, and creates the `nvidia` `RuntimeClass` GPU pods must set
-via `spec.runtimeClassName` to actually reach the GPU. See
-`modules/addons/nvidia-device-plugin/README.md` for what the module sets and
-why, including the pod-spec shape a GPU workload needs.
+`module.gpu_operator` installs the NVIDIA GPU Operator so that node's GPU
+shows up as an `nvidia.com/gpu` resource for Kubernetes to schedule against,
+and creates the `nvidia` `RuntimeClass` GPU pods must set via
+`spec.runtimeClassName` to actually reach the GPU. See
+`modules/addons/gpu-operator/README.md` for what the module sets and why,
+including the pod-spec shape a GPU workload needs.
 
-`nvidia_device_plugin_version` tunes the chart version; there's no matching
-enable flag; unlike `enable_longhorn`, presence is derived entirely from
-`pcigpu`, which is already the single source of truth this repo uses to
-decide the schematic and kernel-module patch, so a second, independently
-toggled flag would only be one more thing to keep in sync.
+The Operator's own driver, container-toolkit and Node Feature Discovery
+components are all disabled — Talos's `nvidia-open-gpu-kernel-modules-production`
+and `nvidia-container-toolkit-production` system extensions already provide
+the driver and the containerd runtime, and `pcigpu` is already this repo's
+one source of truth for "this node has a GPU", so letting NFD auto-detect the
+same fact independently would only be something else to keep in sync. It
+still installs `dcgmExporter` (`enable_dcgm_exporter`, on by default) for GPU
+metrics, picked up automatically by `module.prometheus` when
+`enable_prometheus` is also on.
+
+`gpu_operator_version` tunes the chart version; there's no matching enable
+flag; unlike `enable_longhorn`, presence is derived entirely from `pcigpu`,
+which is already the single source of truth this repo uses to decide the
+schematic and kernel-module patch, so a second, independently toggled flag
+would only be one more thing to keep in sync.
 
 ## Ordering
 
@@ -178,12 +188,15 @@ cluster uses two independent gates, both in `modules/talos-cluster`:
   once per cluster lifetime (a fresh build after `terraform destroy`
   re-triggers it) and needs `curl` on the machine running `terraform apply`.
 
-Cilium, Longhorn, metrics-server, Prometheus, and the NVIDIA device plugin all
-depend on `module.talos_cluster` as a whole, which is enough: a module-level
+Cilium, Longhorn, metrics-server, Prometheus, and the GPU Operator all depend
+on `module.talos_cluster` as a whole, which is enough: a module-level
 `depends_on` waits on every resource inside that module,
 `terraform_data.wait_for_api` included, with no extra wiring needed in
 `addons.tf`. Prometheus additionally depends on `module.longhorn` directly,
-since its PVCs need Longhorn's CSI controller actually running to provision.
+since its PVCs need Longhorn's CSI controller actually running to provision;
+the GPU Operator additionally depends on `module.prometheus` directly, since
+its `dcgmExporter` ServiceMonitor needs the Prometheus Operator's CRD to
+already exist.
 
 The Kubernetes-level checks stay enabled deliberately, because they are the only
 ones that prove the API server answers requests. Talos skips the two that cannot
