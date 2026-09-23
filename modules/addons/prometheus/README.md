@@ -18,18 +18,28 @@ It expects a bootstrapped cluster and the `helm`/`kubernetes` providers to be
 configured by the caller. It creates no namespace besides its own and needs
 nothing from Talos machine configuration or the image schematic.
 
-## Why `kubeEtcd`/`kubeScheduler`/`kubeControllerManager`'s `endpoints = var.controlplane_ips`
+## Why `kubeEtcd.endpoints = var.controlplane_ips`
 
-The chart's `kube-etcd`, `kube-scheduler` and `kube-controller-manager`
-dashboards each expect a Kubernetes `Endpoints` object auto-populated by
-matching a labelled static pod (kubeadm's convention). Talos runs all three
-as host-level processes, not Kubernetes pods, so nothing ever matches those
-selectors and every one of those `Endpoints` objects stays permanently
-empty — every panel on all three dashboards shows "No data" regardless of
-whether the components themselves are healthy. Each has the identical,
-chart-documented escape hatch ("If your etcd/scheduler/controller manager is
-not deployed as a pod, specify IPs it can be found on"); pointing all three
-at the actual control-plane IPs gives Prometheus something to scrape.
+The chart's `kube-etcd` dashboard expects a Kubernetes `Endpoints` object
+auto-populated by matching a labelled static pod (kubeadm's convention).
+Talos runs etcd as a host-level process, not a Kubernetes pod, so nothing
+ever matches that selector and the `Endpoints` stay permanently empty —
+every panel on the etcd dashboard shows "No data" regardless of whether etcd
+itself is healthy. `kubeEtcd.endpoints` is the chart's own documented escape
+hatch ("If your etcd is not deployed as a pod, specify IPs it can be found
+on"); pointing it at the actual control-plane IPs gives Prometheus something
+to scrape.
+
+`kube-scheduler` and `kube-controller-manager` have the identical-looking
+`endpoints` override in the chart, but need it left alone here: Talos runs
+both of those as labelled static pods, so their `Endpoints` already
+auto-populate correctly via the chart's default Service selector (confirmed
+live: real `targetRef`s pointing at `kube-scheduler-<node>` /
+`kube-controller-manager-<node>` pods, created by Kubernetes' own
+endpoint-controller, not Helm). Setting `endpoints` on either would make the
+chart template a manually-specified `Endpoints` object under the same name
+Kubernetes already manages — which conflicts, since that existing object
+was never annotated as Helm-owned in the first place.
 
 ## Why the privileged namespace label
 

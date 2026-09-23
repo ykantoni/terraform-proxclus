@@ -143,6 +143,17 @@ privileged-namespace label node-exporter needs, and why
 `serviceMonitorSelectorNilUsesHelmValues` (and its `podMonitor`/`rule`
 equivalents) are turned off.
 
+`enable_etcd_metrics = true` (default `false`) is the one exception to
+"touches no machine configuration": it patches every control-plane node so
+etcd opens an unauthenticated metrics listener on `:2381`, which Talos
+doesn't do by default since it runs etcd as a host-level process rather
+than a pod the chart's default Service selector can discover. Without it,
+the etcd dashboard's panels all read "No data" even with `enable_prometheus
+= true`, since there's nothing for Prometheus to scrape. Causes a brief
+etcd reconfigure/restart on every control-plane node when toggled either
+way; see `variables.tf`'s description for the rollback story on a
+single-control-plane cluster.
+
 ## Logging
 
 `enable_loki = true` (default `false`) installs

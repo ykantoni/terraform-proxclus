@@ -22,22 +22,13 @@ resource "kubernetes_namespace" "monitoring" {
 
 locals {
   kube_prometheus_stack_values = {
-    # Talos runs etcd, the scheduler and the controller-manager as host-level
-    # processes, not kubeadm-style labelled static pods, so the chart's
-    # default Service selector for each never matches a pod and its
-    # Endpoints stay empty — "If your etcd is not deployed as a pod, specify
-    # IPs it can be found on" is the chart's own values.yaml comment for
-    # exactly this, and kubeScheduler/kubeControllerManager both have the
-    # identical override.
+    # Unlike kube-scheduler and kube-controller-manager (which Talos runs as
+    # labelled static pods, so the chart's default Service-selector-based
+    # Endpoints already populate correctly), etcd runs as a host-level
+    # process with no matching pod, so its Endpoints stay permanently empty.
+    # "If your etcd is not deployed as a pod, specify IPs it can be found
+    # on" is the chart's own values.yaml comment for exactly this.
     kubeEtcd = {
-      endpoints = var.controlplane_ips
-    }
-
-    kubeScheduler = {
-      endpoints = var.controlplane_ips
-    }
-
-    kubeControllerManager = {
       endpoints = var.controlplane_ips
     }
 

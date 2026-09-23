@@ -28,6 +28,10 @@ module "talos_cluster" {
     file("${path.module}/modules/addons/longhorn/patches/longhorn-mounts.patch.yaml")
   ] : []
 
+  controlplane_config_patches = var.enable_etcd_metrics ? [
+    file("${path.module}/modules/addons/prometheus/patches/etcd-metrics.patch.yaml")
+  ] : []
+
   nodes = module.proxmox_talos_vms.nodes
 }
 

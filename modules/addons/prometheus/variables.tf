@@ -66,7 +66,7 @@ variable "grafana_admin_password" {
 }
 
 variable "controlplane_ips" {
-  description = "Control-plane node IPs, so the kube-etcd (and kube-scheduler/kube-controller-manager) dashboards have somewhere to scrape. Talos runs these as host-level processes rather than kubeadm-style labelled static pods, so the chart's default Service selector never matches anything and its Endpoints stay permanently empty without this."
+  description = "Control-plane node IPs, so the kube-etcd dashboard has somewhere to scrape. Talos runs etcd as a host-level process rather than a labelled static pod, so the chart's default Service selector never matches anything and its Endpoints stay permanently empty without this. kube-scheduler and kube-controller-manager need no equivalent: Talos does run those as labelled pods, so their Endpoints already populate correctly on their own."
   type        = list(string)
   default     = []
 }

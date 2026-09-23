@@ -22,6 +22,11 @@ enable_prometheus = true
 # defaults to the "longhorn" StorageClass.
 enable_loki = true
 
+# Patches cp1 so etcd opens a metrics listener on :2381 for the kube-etcd
+# Grafana dashboard. Unlike the other enable_* flags above, this reconfigures
+# etcd itself (a brief restart on cp1), not just a Helm release.
+enable_etcd_metrics = true
+
 # Off because cp1, worker2 and worker3 never reach Talos stage "running": the
 # NVIDIA extensions in the shared image wait forever for a GPU those nodes do
 # not have, so the "all nodes to finish boot sequence" check can never pass.

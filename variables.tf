@@ -147,6 +147,12 @@ variable "grafana_admin_password" {
   sensitive   = true
 }
 
+variable "enable_etcd_metrics" {
+  description = "Adds a control-plane machine-config patch (cluster.etcd.extraArgs.listen-metrics-urls) opening etcd's plain-HTTP metrics listener on :2381, unauthenticated. Off by default: unlike every other addon toggle in this repo, this reconfigures etcd itself (a brief restart on every control-plane node) rather than just installing a Helm release. Needed for kube-prometheus-stack's etcd dashboard to show anything at all — Talos runs etcd as a host-level process, not a labelled pod the chart can discover on its own, and doesn't open a metrics port unless told to. To roll back, set this back to false and re-apply: talos_machine_configuration_apply pushes machine config over Talos's own gRPC API (port 50000), which stays reachable independently of Kubernetes/etcd health, so this is recoverable even if the new listener somehow left etcd unhealthy."
+  type        = bool
+  default     = false
+}
+
 variable "enable_loki" {
   description = "Install Loki (single-binary, filesystem storage) and Promtail, for centralized log aggregation queryable from Grafana. Its PVC defaults to the \"longhorn\" StorageClass (see modules/addons/loki's storage_class default), so this needs enable_longhorn = true too. Touches no machine configuration and needs no reboot on its own."
   type        = bool
