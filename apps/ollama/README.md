@@ -80,11 +80,10 @@ class, since chat history/accounts are worth actually replicating.
 Because it's statically provisioned, that directory has to already exist,
 be writable, and persist across reboots on the GPU node *before* `terraform
 apply` — Terraform only creates the `PersistentVolume` object, not the
-directory it points at. On Talos, a path also generally needs an
-`extraMounts` patch on that node's machine config before pods can use it
-(see `../../modules/addons/longhorn/patches/longhorn-mounts.patch.yaml` for
-the pattern this cluster already uses to expose `/var/lib/longhorn` the same
-way).
+directory it points at. A normal Ubuntu kubelet already sees any host path
+with no extra mount configuration needed (this cluster ran on Talos until
+its move to Ubuntu + RKE2, which did need a machine-config patch for this —
+see git history if that mechanism is ever relevant again).
 
 Set `ollama_storage_class = "longhorn"` to go back to Longhorn-backed
 storage instead, and raise `var.nodes[*].disk` on the GPU node in the root

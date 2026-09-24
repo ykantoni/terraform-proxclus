@@ -1,0 +1,112 @@
+#cloud-config
+# Rendered by modules/rke2-config for node "${hostname}" (role: ${role}).
+# Hardening (SSH/ufw/unattended-upgrades/auditd/sysctls), the RKE2 binary,
+# and (on GPU nodes) the NVIDIA driver + container toolkit are already baked
+# into the Proxmox template by packer/ — this file only supplies per-node
+# identity and the RKE2 role config, kept as small as possible on purpose.
+hostname: ${hostname}
+manage_etc_hosts: true
+
+users:
+  - name: ${ssh_admin_user}
+    groups: [sudo]
+    shell: /bin/bash
+    sudo: ["ALL=(ALL) NOPASSWD:ALL"]
+    lock_passwd: true
+    ssh_authorized_keys:
+      - ${ssh_public_key}
+
+write_files:
+  - path: /etc/rancher/rke2/config.yaml
+    permissions: "0600"
+    content: |
+%{ if role == "controlplane" ~}
+      token: ${rke2_token}
+      tls-san:
+        - ${controlplane_vip}
+        - ${bootstrap_ip}
+%{ if external_ip != null ~}
+        - ${external_ip}
+%{ endif ~}
+%{ if cni == "cilium" ~}
+      cni: none
+      disable-kube-proxy: true
+%{ endif ~}
+      # Nothing RKE2 bundles by default should compete with this cluster's
+      # own addons (modules/addons/metrics-server, modules/addons/longhorn),
+      # regardless of which CNI is in play; rke2-canal is only in this list
+      # when Cilium is replacing it. Verify these component names against
+      # the RKE2 docs current at build time -- they're stable but not a
+      # Terraform-checked contract.
+      disable:
+%{ if cni == "cilium" ~}
+        - rke2-canal
+%{ endif ~}
+        - rke2-ingress-nginx
+        - rke2-metrics-server
+        - rke2-servicelb
+        - rke2-local-storage
+      profile: cis
+      write-kubeconfig-mode: "0600"
+%{ else ~}
+      # Workers join through the bootstrap node's own IP, not the VIP:
+      # kube-vip is itself an RKE2 auto-deployed manifest (see below), so at
+      # first boot it isn't guaranteed to be up yet. cp1's static IP is the
+      # one thing guaranteed to exist by the time this runs.
+      server: https://${bootstrap_ip}:9345
+      token: ${rke2_token}
+      profile: cis
+%{ endif ~}
+%{ if role == "controlplane" ~}
+  # RKE2 auto-applies anything dropped in server/manifests/ once it's up --
+  # no separate kubectl apply needed. This is the direct replacement for
+  # Talos's Layer2VIPConfig patch: kube-vip advertises controlplane_vip over
+  # ARP from whichever node is running it (only this one, today), giving a
+  # stable endpoint independent of which physical node is the control plane.
+  #
+  # hostNetwork: true means kube-vip doesn't need pod-network connectivity to
+  # come up, but a freshly-booted node with cni: none is still tainted
+  # NotReady until Cilium installs the CNI, and a plain pod without
+  # tolerations won't schedule onto a NotReady/control-plane-tainted node --
+  # hence the explicit tolerations below. This is the most likely spot to
+  # need tuning against whatever RKE2/kube-vip versions are current at
+  # implementation time; if kube-vip doesn't come up on first boot, check
+  # `kubectl -n kube-system describe pod kube-vip` for scheduling events.
+  - path: /var/lib/rancher/rke2/server/manifests/kube-vip.yaml
+    permissions: "0600"
+    content: |
+      apiVersion: v1
+      kind: Pod
+      metadata:
+        name: kube-vip
+        namespace: kube-system
+      spec:
+        hostNetwork: true
+        tolerations:
+          - key: node-role.kubernetes.io/control-plane
+            effect: NoSchedule
+          - key: node.kubernetes.io/not-ready
+            operator: Exists
+            effect: NoExecute
+        containers:
+          - name: kube-vip
+            image: ghcr.io/kube-vip/kube-vip:v0.8.7
+            imagePullPolicy: IfNotPresent
+            args: ["manager"]
+            securityContext:
+              capabilities:
+                add: ["NET_ADMIN", "NET_RAW"]
+            env:
+              - { name: vip_arp, value: "true" }
+              - { name: port, value: "6443" }
+              - { name: vip_interface, value: "eth0" }
+              - { name: vip_cidr, value: "32" }
+              - { name: cp_enable, value: "true" }
+              - { name: cp_namespace, value: kube-system }
+              - { name: vip_address, value: "${controlplane_vip}" }
+              - { name: vip_leaderelection, value: "true" }
+              - { name: svc_enable, value: "false" }
+%{ endif ~}
+
+runcmd:
+  - systemctl enable --now rke2-${role == "controlplane" ? "server" : "agent"}.service

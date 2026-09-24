@@ -5,15 +5,14 @@ variable "cilium_version" {
 }
 
 variable "k8s_service_host" {
-  description = "Address Cilium uses to reach the Kubernetes API. localhost targets KubePrism on the node."
+  description = "Address Cilium uses to reach the Kubernetes API: the kube-vip-advertised control-plane VIP, reachable independently of the CNI since kube-vip is a hostNetwork pod using ARP, not routed pod-network traffic."
   type        = string
-  default     = "localhost"
 }
 
 variable "k8s_service_port" {
   description = "Port Cilium uses to reach the Kubernetes API"
   type        = number
-  default     = 7445
+  default     = 6443
 }
 
 variable "lb_ipam_pool_name" {

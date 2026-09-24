@@ -11,7 +11,7 @@ variable "namespace" {
 }
 
 variable "data_path" {
-  description = "Path on each node's disk where Longhorn stores replica data. Must match the /var/lib/longhorn kubelet bind mount in modules/addons/longhorn/patches, which is static YAML and does not read this variable."
+  description = "Path on each node's disk where Longhorn stores replica data. A normal Ubuntu kubelet needs no extra mount configuration to expose this to pods, unlike Talos, which required a machine-config patch matching this same path."
   type        = string
   default     = "/var/lib/longhorn"
 }

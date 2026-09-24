@@ -3,9 +3,6 @@ provider "proxmox" {
   insecure = true
 }
 
-provider "talos" {
-}
-
 # Referencing the resource rather than the literal path keeps provider
 # configuration ordered after the kubeconfig is written.
 provider "helm" {

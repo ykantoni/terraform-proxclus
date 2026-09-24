@@ -1,0 +1,47 @@
+variable "controlplane_vip" {
+  type = string
+}
+
+variable "bootstrap_ip" {
+  description = "IP of the node to SSH into for readiness polling and kubeconfig retrieval (module.rke2_config.bootstrap_ip)"
+  type        = string
+}
+
+variable "ssh_admin_user" {
+  type = string
+}
+
+variable "ssh_private_key_pem" {
+  sensitive = true
+  type      = string
+}
+
+variable "wait_for_api" {
+  description = "Poll the bootstrap node over SSH until rke2-server is active, then fetch the kubeconfig. Turn off to plan against a cluster that is down."
+  type        = bool
+  default     = true
+}
+
+variable "api_wait_timeout" {
+  type    = number
+  default = 300
+}
+
+variable "api_wait_interval" {
+  type    = number
+  default = 5
+}
+
+variable "nodes" {
+  description = "module.proxmox_vm.nodes -- deliberately VM-output-derived, not the raw var.nodes, so this module's resources only run once the VMs actually exist"
+
+  type = map(object({
+    vm_id  = number
+    name   = string
+    ip     = string
+    cidr   = number
+    mac    = string
+    role   = string
+    pcigpu = string
+  }))
+}

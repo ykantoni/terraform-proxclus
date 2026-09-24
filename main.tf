@@ -1,39 +1,51 @@
 
-module "proxmox_talos_vms" {
-  source = "./modules/proxmox-talos-vm"
+module "rke2_config" {
+  source = "./modules/rke2-config"
+
+  proxmox_node         = var.proxmox_node
+  snippet_datastore_id = var.datastore_id
+  cni                  = var.cni
+  controlplane_vip     = var.controlplane_vip
+  external_ip          = var.external_ip
+  ssh_admin_user       = var.ssh_admin_user
+
+  nodes = var.nodes
+}
+
+module "proxmox_vm" {
+  source = "./modules/proxmox-vm"
 
   proxmox_node = var.proxmox_node
   datastore_id = var.datastore_id
   bridge       = var.bridge
+  gateway      = var.gateway
+  nameservers  = var.nameservers
+
+  template_vm_id_common = var.template_vm_id_common
+  template_vm_id_gpu    = var.template_vm_id_gpu
+
+  cloudinit_file_ids = module.rke2_config.cloudinit_file_ids
 
   nodes = var.nodes
 }
-module "talos_cluster" {
-  source = "./modules/talos-cluster"
 
-  cluster_name              = var.cluster_name
-  talos_version             = var.talos_version
-  talos_schematic_id_common = talos_image_factory_schematic.common.id
-  talos_schematic_id_gpu    = talos_image_factory_schematic.gpu.id
-  gateway                   = var.gateway
-  nameservers               = var.nameservers
-  controlplane_vip          = var.controlplane_vip
-  external_ip               = var.external_ip
-  cni                       = var.cni
-  kube_prism_port           = var.kube_prism_port
-  wait_for_health           = var.wait_for_health
-  wait_for_api              = var.wait_for_api
+module "rke2_cluster" {
+  source = "./modules/rke2-cluster"
 
-  config_patches = var.enable_longhorn ? [
-    file("${path.module}/modules/addons/longhorn/patches/longhorn-mounts.patch.yaml")
-  ] : []
+  controlplane_vip    = var.controlplane_vip
+  bootstrap_ip        = module.rke2_config.bootstrap_ip
+  ssh_admin_user      = module.rke2_config.ssh_admin_user
+  ssh_private_key_pem = module.rke2_config.ssh_private_key_pem
+  wait_for_api        = var.wait_for_api
+  api_wait_timeout    = var.api_wait_timeout
+  api_wait_interval   = var.api_wait_interval
 
-  nodes = module.proxmox_talos_vms.nodes
+  nodes = module.proxmox_vm.nodes
 }
 
 resource "local_sensitive_file" "kubeconfig" {
   filename = "${path.root}/.kube/config"
-  content  = module.talos_cluster.kubeconfig
+  content  = module.rke2_cluster.kubeconfig
 
   file_permission      = "0600"
   directory_permission = "0700"

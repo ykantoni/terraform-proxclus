@@ -7,10 +7,6 @@ terraform {
       version = "~> 0.111.1"
     }
 
-    talos = {
-      source = "siderolabs/talos"
-    }
-
     helm = {
       source  = "hashicorp/helm"
       version = "~> 3.1"
@@ -24,6 +20,14 @@ terraform {
     local = {
       source  = "hashicorp/local"
       version = "~> 2.5"
+    }
+
+    random = {
+      source = "hashicorp/random"
+    }
+
+    tls = {
+      source = "hashicorp/tls"
     }
   }
 

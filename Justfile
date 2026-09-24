@@ -26,10 +26,11 @@ destroy:
 fmt:
     terraform fmt -recursive
 
-# Build both Proxmox VM templates: the plain one (vm_id 9000) common nodes
-# clone from, and the NVIDIA one (vm_id 9001) GPU-tagged nodes clone from.
+# Build both Proxmox VM templates: the plain one (vm_id 9100) common nodes
+# clone from, and the GPU one (vm_id 9101) GPU-tagged nodes clone from. Run
+# vm-templates/import-ubuntu-cloud-image.sh once first (see packer/README.md).
 t-create:
-    /usr/bin/bash -c "pushd vm-templates && sudo ./qemu-iscsi-2c.sh && sudo ./nvidia-qemu-iscsi-2c.sh && popd"
+    /usr/bin/bash -c "pushd packer && packer init . && packer build ubuntu-common.pkr.hcl && packer build ubuntu-gpu.pkr.hcl && popd"
 
 # Destroy the Postgres cluster.
 pg-destroy:
@@ -41,12 +42,12 @@ pg-create:
 
 # Destroy both templates.
 t-destroy:
-    sudo /usr/sbin/qm destroy 9000
-    sudo /usr/sbin/qm destroy 9001
+    sudo /usr/sbin/qm destroy 9100
+    sudo /usr/sbin/qm destroy 9101
 
-# Write talosconfig and kubeconfig from Terraform outputs.
+# Write kubeconfig and an SSH key for ssh_admin_user from Terraform outputs.
 generate:
-    terraform output -raw talosconfig > "$HOME/talosconfig"
     mkdir -p "$HOME/.kube"
     terraform output -raw kubeconfig > "$HOME/.kube/config"
-    chmod 600 "$HOME/talosconfig" "$HOME/.kube/config"
+    terraform output -raw ssh_private_key > "$HOME/.ssh/rke2_admin"
+    chmod 600 "$HOME/.kube/config" "$HOME/.ssh/rke2_admin"

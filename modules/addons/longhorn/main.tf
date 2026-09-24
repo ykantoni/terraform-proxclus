@@ -10,11 +10,12 @@ locals {
       defaultFsType            = "ext4"
     }
 
-    # Matches the /var/lib/longhorn kubelet bind mount added to every node's
-    # machine configuration; see modules/addons/longhorn/patches. The iSCSI
-    # and util-linux tooling Longhorn's engine shells out to comes from the
-    # siderolabs/iscsi-tools and siderolabs/util-linux-tools extensions in
-    # customization.yaml, not from anything this chart installs.
+    # A normal Ubuntu kubelet already sees this path with no extra mount
+    # config needed (unlike Talos, which required a kubelet extraMounts
+    # patch to expose it at all — see git history for that mechanism). The
+    # iSCSI and util-linux tooling Longhorn's engine shells out to is
+    # installed and enabled once, in packer/, not by anything this chart
+    # installs.
     defaultSettings = {
       defaultDataPath = var.data_path
     }

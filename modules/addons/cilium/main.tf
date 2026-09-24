@@ -5,16 +5,22 @@ locals {
       mode = "kubernetes"
     }
 
-    # Talos deploys no kube-proxy when cni is cilium, so Cilium must take over
-    # service routing. L2 announcements also require it.
+    # RKE2 is configured with cni: none and disable-kube-proxy: true (see
+    # modules/rke2-config), so Cilium must take over service routing. L2
+    # announcements also require it.
     kubeProxyReplacement = true
 
-    # KubePrism fronts the control plane on every node, so Cilium keeps talking
-    # to the API server even while it is the thing providing cluster networking.
+    # kube-vip's control-plane VIP is what fronts the API server here (the
+    # RKE2-world replacement for Talos's KubePrism), reachable independently
+    # of the CNI since it's a hostNetwork pod using ARP, not routed
+    # pod-network traffic -- so Cilium can reach it even while it's the thing
+    # bringing pod networking up in the first place.
     k8sServiceHost = var.k8s_service_host
     k8sServicePort = var.k8s_service_port
 
-    # Talos mounts cgroupv2 and bpffs itself; Cilium must not remount them.
+    # Ubuntu (systemd) already mounts cgroupv2 itself, same as Talos did;
+    # kept false so Cilium doesn't try to remount it. Validate this still
+    # holds under RKE2/Ubuntu 26.04 rather than assuming.
     cgroup = {
       autoMount = {
         enabled = false
@@ -23,8 +29,10 @@ locals {
       hostRoot = "/sys/fs/cgroup"
     }
 
-    # Talos forbids workloads from loading kernel modules, so SYS_MODULE is
-    # dropped from Cilium's default capability set.
+    # Talos forbade workloads from loading kernel modules; nothing on
+    # Ubuntu/RKE2 requires the same restriction, but dropping SYS_MODULE from
+    # Cilium's capability set is still harmless (kernel modules load once,
+    # via packer/, not from a running Cilium agent), so it stays dropped.
     securityContext = {
       capabilities = {
         ciliumAgent = [

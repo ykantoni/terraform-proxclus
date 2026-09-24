@@ -21,13 +21,38 @@ variable "bridge" {
 }
 
 variable "cluster_name" {
-  description = "Talos/Kubernetes cluster name"
+  description = "Kubernetes cluster name"
   type        = string
 }
 
-variable "talos_version" {
-  description = "Talos Linux version used for generated machine configuration"
+variable "ssh_admin_user" {
+  description = "Username created on every node via cloud-init, with passwordless sudo and the Terraform-managed SSH key as its only auth method. modules/rke2-cluster uses this account to poll readiness and fetch the kubeconfig; nothing else needs interactive SSH access as a matter of course."
   type        = string
+  default     = "rke2admin"
+}
+
+variable "template_vm_id_common" {
+  description = "Proxmox template ID cloned by nodes without a pcigpu. Built by packer/ubuntu-common.pkr.hcl; see packer/README.md."
+  type        = number
+  default     = 9100
+}
+
+variable "template_vm_id_gpu" {
+  description = "Proxmox template ID cloned by nodes with a pcigpu set. Built by packer/ubuntu-gpu.pkr.hcl; see packer/README.md."
+  type        = number
+  default     = 9101
+}
+
+variable "api_wait_timeout" {
+  description = "Seconds to poll the bootstrap node over SSH for an active rke2-server before giving up, when wait_for_api is on"
+  type        = number
+  default     = 300
+}
+
+variable "api_wait_interval" {
+  description = "Seconds between polls, when wait_for_api is on"
+  type        = number
+  default     = 5
 }
 
 variable "gateway" {
@@ -41,18 +66,19 @@ variable "nameservers" {
 }
 
 variable "controlplane_vip" {
-  type    = string
-  default = "192.168.1.99"
+  description = "Floating IP kube-vip advertises for the API server (ARP mode, run as an RKE2 auto-deployed manifest on the control-plane node). Kept as a stable endpoint distinct from any one node's own IP, the same property Talos's Layer2VIPConfig gave this cluster, ready for a second control-plane node later without reconfiguring every client."
+  type        = string
+  default     = "192.168.1.99"
 }
 
 variable "external_ip" {
-  description = "Public IP address or hostname a router NATs through to controlplane_vip, so the cluster can be reached from outside the LAN. Added to the Talos and Kubernetes API certificate SANs; the NAT rule itself is configured on the router, not by Terraform. Leave null (the default) to keep the cluster LAN-only."
+  description = "Public IP address or hostname a router NATs through to controlplane_vip, so the cluster can be reached from outside the LAN. Added to the control-plane's RKE2 tls-san; the NAT rule itself is configured on the router, not by Terraform. Leave null (the default) to keep the cluster LAN-only."
   type        = string
   default     = "91.152.206.161"
 }
 
 variable "cni" {
-  description = "Cluster CNI. cilium keeps Talos from deploying Flannel and kube-proxy and installs Cilium in their place."
+  description = "Cluster CNI. cilium sets cni: none and disable-kube-proxy: true in every node's RKE2 config (see modules/rke2-config) and installs Cilium in their place."
   type        = string
   default     = "cilium"
 
@@ -68,12 +94,6 @@ variable "cilium_version" {
   default     = "1.19.6"
 }
 
-variable "kube_prism_port" {
-  description = "Port the per-node KubePrism API server proxy listens on"
-  type        = number
-  default     = 7445
-}
-
 variable "enable_hubble_ui" {
   description = "Install Hubble Relay + Hubble UI behind Cilium, giving a web dashboard of live CNI traffic (service map, policy verdicts, DNS, L7 flows). Touches no machine configuration and needs no reboot, so it defaults on. Ignored when cni != \"cilium\"."
   type        = bool
@@ -86,20 +106,14 @@ variable "hubble_ui_service_type" {
   default     = "LoadBalancer"
 }
 
-variable "wait_for_health" {
-  description = "Health check the cluster before installing addons. Turn off to plan against a cluster that is down."
-  type        = bool
-  default     = true
-}
-
 variable "wait_for_api" {
-  description = "Poll the Kubernetes API at controlplane_vip until it answers before installing addons. Narrower than wait_for_health: it only proves the API server is reachable, so it stays useful even when wait_for_health is off."
+  description = "Poll the bootstrap node over SSH until rke2-server is active, then fetch its kubeconfig, before installing addons. Turn off to plan against a cluster that is down."
   type        = bool
   default     = true
 }
 
 variable "enable_longhorn" {
-  description = "Install Longhorn as the cluster's default CSI provider for dynamic PV provisioning. Also adds the /var/lib/longhorn kubelet mount to every node's machine configuration; turning this on reboots every node."
+  description = "Install Longhorn as the cluster's default CSI provider for dynamic PV provisioning. Unlike under Talos, this needs no machine-config change or reboot to turn on: a normal Ubuntu kubelet already sees /var/lib/longhorn with no extra mount configuration."
   type        = bool
   default     = false
 }
@@ -172,7 +186,7 @@ variable "load_balancer_ip_range" {
 }
 
 variable "nodes" {
-  description = "Talos cluster nodes"
+  description = "Cluster nodes"
 
   type = map(object({
     vm_id = number

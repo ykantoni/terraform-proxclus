@@ -10,8 +10,7 @@ runtime the GPU actually needs.
 This module manages:
 
 - a `RuntimeClass` named `nvidia` (handler `nvidia`), matching the containerd
-  runtime the `siderolabs/nvidia-container-toolkit-production` system
-  extension registers on the host — GPU pods request it with
+  runtime handler registered on the host — GPU pods request it with
   `spec.runtimeClassName: nvidia`
 - an `nvidia.com/gpu.present=true` label on each Kubernetes Node that
   corresponds to one of `var.gpu_node_ips`
@@ -20,19 +19,25 @@ This module manages:
   onto nodes that actually have a GPU
 
 It expects a bootstrapped cluster and the `helm`/`kubernetes` providers to be
-configured by the caller. It does not touch machine configuration — the
-kernel-module patch and image schematic that give the node a GPU driver in
-the first place live in `modules/talos-cluster` and `schematic.tf` and are
-selected by the same `pcigpu` field this module reads.
+configured by the caller. It does not touch node provisioning — the NVIDIA
+driver, container toolkit, and `nvidia-ctk runtime configure` step that
+registers the `nvidia` containerd runtime handler in RKE2's containerd
+config template are all baked into the GPU node's image ahead of time by
+`packer/ubuntu-gpu.pkr.hcl`, selected by the same `pcigpu` field this module
+reads (this repo previously did the same registration via a Talos system
+extension instead; the module itself needed no change either way — only the
+mechanism providing that runtime handler changed).
 
 ## Why nodes are matched by IP, not name
 
 The root module's `var.nodes` knows each GPU node's Proxmox VM name and
-static IP, but nothing pins the *Kubernetes* Node name to either: Talos
-derives it from the node's hostname, which this cluster never sets
-explicitly. Rather than assume the two line up, this module reads
-`data.kubernetes_nodes` and matches each `var.gpu_node_ips` entry against the
-Node's own reported `InternalIP`.
+static IP; this module reads `data.kubernetes_nodes` and matches each
+`var.gpu_node_ips` entry against the Node's own reported `InternalIP` rather
+than assuming the Kubernetes Node name equals `var.nodes`' key or `name`
+field. Cloud-init does set each node's hostname explicitly now (unlike
+Talos, which derived it and left this cluster never setting one), so
+matching by name would likely also work today — IP-matching is kept anyway
+since it's already proven, needs no such assumption, and has no downside.
 
 ## Why a nodeSelector instead of relying on the chart's defaults
 

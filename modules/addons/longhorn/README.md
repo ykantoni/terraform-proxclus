@@ -13,23 +13,23 @@ This module manages:
   cluster default
 
 It expects a bootstrapped cluster and the `helm` provider to be configured by
-the caller. It does not touch machine configuration; that half lives in
-`patches/` and is applied by the root module through `module.talos_cluster`'s
-`config_patches` input (see the root README's "Adding an addon" section).
+the caller. It touches no VM/node provisioning: a normal Ubuntu kubelet
+already sees any host path with no machine-config-equivalent step needed
+(unlike Talos, which needed a kubelet `extraMounts` patch to expose
+`/var/lib/longhorn` at all — see git history for that mechanism, dropped once
+this cluster moved off Talos).
 
-## Talos specifics
+## What Longhorn needs from the node
 
-Longhorn needs three things Talos does not provide by default, all handled
-outside this module:
-
-- `siderolabs/iscsi-tools` and `siderolabs/util-linux-tools` in
-  `customization.yaml`, so `iscsid` and the block-device tooling Longhorn's
-  engine shells out to exist on the host
-- a `/var/lib/longhorn` kubelet bind mount, from
-  `patches/longhorn-mounts.patch.yaml`, matching `var.data_path`
+- `open-iscsi` and `util-linux`/`nfs-common`, installed and `iscsid` enabled,
+  so the block-device tooling Longhorn's engine shells out to exists on the
+  host — baked into every node's image in `packer/`, the RKE2-world
+  replacement for Talos's `siderolabs/iscsi-tools`/`siderolabs/util-linux-tools`
+  system extensions
 - the `longhorn-system` namespace's pod-security label, since Longhorn's
   engine and CSI plugin pods need privileged access to host block devices
-  that the restricted Pod Security Standard forbids
+  that the restricted Pod Security Standard forbids — this module's own
+  responsibility, unchanged
 
 The namespace is a `kubernetes_namespace` resource, not part of the Helm
 release, because neither Helm-native option works here: Helm records a
@@ -57,11 +57,8 @@ carry the pod-security label from the start.
 
 ## Notes
 
-`data_path` and the bind mount in `patches/longhorn-mounts.patch.yaml` must
-agree. The patch is static YAML — Terraform's `config_patches` input forbids
-anything else, so it does not read `var.data_path` — so changing the data path
-means editing both.
-
-Machine-config patches only take effect on `terraform apply`, and Talos
-reboots the node to apply them. Turning this addon on for the first time
-reboots every node in the cluster.
+`data_path` just needs to be a writable directory on the node's disk;
+Longhorn creates it if it doesn't already exist. No reboot or node-image
+change is needed to turn this addon on or change the path, unlike under
+Talos, where enabling it the first time rebooted every node to apply the now
+-removed machine-config patch.
