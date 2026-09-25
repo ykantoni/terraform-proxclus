@@ -15,10 +15,6 @@ jobs:
       - terraform
       - proxmox
 
-    defaults:
-      run:
-        working-directory: infrastructure
-
     env:
       TF_VAR_proxmox_endpoint: ${{ secrets.PROXMOX_VE_ENDPOINT }}
       TF_VAR_proxmox_api_token: ${{ secrets.PROXMOX_VE_API_TOKEN }}
