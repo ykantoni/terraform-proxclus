@@ -1,4 +1,4 @@
-proxmox_node     = "jupiter"
+proxmox_node = "jupiter"
 
 datastore_id = "sdc-storage"
 bridge       = "vmbr0"
