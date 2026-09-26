@@ -30,8 +30,4 @@ terraform {
       source = "hashicorp/tls"
     }
   }
-
-  backend "local" {
-    path = "/home/yurick/terraform/state/terraform.tfstate"
-  }
 }
