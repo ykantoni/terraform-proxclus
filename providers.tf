@@ -1,6 +1,5 @@
 provider "proxmox" {
-  endpoint = var.proxmox_endpoint
-  insecure = true
+  insecure  = true
 }
 
 # Referencing the resource rather than the literal path keeps provider
