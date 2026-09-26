@@ -1,4 +1,3 @@
-proxmox_endpoint = "https://192.168.1.15:8006/"
 proxmox_node     = "jupiter"
 
 datastore_id = "sdc-storage"
