@@ -6,7 +6,7 @@ provider "proxmox" {
 # configuration ordered after the kubeconfig is written.
 provider "helm" {
   kubernetes = {
-    config_path = local_sensitive_file.kubeconfig.filename
+    config_path = pathexpand("~/.kube/config")
   }
 }
 
@@ -15,5 +15,5 @@ provider "helm" {
 # same way as the helm provider and for the same reason: ordered after the
 # kubeconfig is written.
 provider "kubernetes" {
-  config_path = local_sensitive_file.kubeconfig.filename
+  config_path = pathexpand("~/.kube/config")
 }
