@@ -87,8 +87,11 @@ just apply
 just generate   # writes ~/.kube/config and ~/.ssh/rke2_admin
 ```
 
-`terraform apply` also writes a kubeconfig to `.kube/config` inside this
-directory, because the `helm` provider needs one to reach the cluster.
+`terraform apply` also writes the cluster's kubeconfig to `~/.kube/config`,
+replacing whatever is there, because the `helm` and `kubernetes` providers
+read it from that path to reach the cluster. The providers read the file
+when Terraform configures them, before anything is applied, so on a fresh
+build the addons only succeed once that file exists (a second `just apply`).
 
 ## Networking
 

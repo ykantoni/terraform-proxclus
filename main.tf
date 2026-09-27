@@ -44,7 +44,7 @@ module "rke2_cluster" {
 }
 
 resource "local_sensitive_file" "kubeconfig" {
-  filename = "${path.root}/.kube/config"
+  filename = pathexpand("~/.kube/config")
   content  = module.rke2_cluster.kubeconfig
 
   file_permission      = "0600"
