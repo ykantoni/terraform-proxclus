@@ -110,3 +110,21 @@ module "nvidia_device_plugin" {
     local_sensitive_file.kubeconfig,
   ]
 }
+
+module "argocd" {
+  source = "./modules/addons/argocd"
+
+  count = var.enable_argocd ? 1 : 0
+
+  argocd_version      = var.argocd_version
+  argocd_service_type = var.argocd_service_type
+
+  # Same reasoning as module.longhorn: needs pod networking up, which
+  # module.rke2_cluster's own readiness gate does not guarantee, so it also
+  # waits on module.cilium's helm_release when cni is cilium.
+  depends_on = [
+    module.rke2_cluster,
+    module.cilium,
+    local_sensitive_file.kubeconfig,
+  ]
+}

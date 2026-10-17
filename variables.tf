@@ -162,6 +162,24 @@ variable "nvidia_device_plugin_version" {
   default     = "0.20.0"
 }
 
+variable "enable_argocd" {
+  description = "Install ArgoCD (see modules/addons/argocd). ArgoCD-only: this does not wire it to any git repo or bootstrap an app-of-apps -- that's a deliberate follow-up, not built until there's a repo to point it at. Touches no machine configuration and needs no reboot."
+  type        = bool
+  default     = false
+}
+
+variable "argocd_version" {
+  description = "argo-cd Helm chart version"
+  type        = string
+  default     = "7.8.2"
+}
+
+variable "argocd_service_type" {
+  description = "Kubernetes Service type argocd-server is exposed as. LoadBalancer (the default) gets an address from Cilium's load_balancer_ip_range, same as this cluster's other UIs; see modules/addons/argocd/README.md for why that address should be treated as cluster-admin-sensitive."
+  type        = string
+  default     = "LoadBalancer"
+}
+
 variable "load_balancer_ip_range" {
   description = "Inclusive address range Cilium hands to LoadBalancer services. Must be free on the node subnet."
 
