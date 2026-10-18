@@ -21,6 +21,8 @@ module "cilium" {
   count = var.cni == "cilium" ? 1 : 0
 
   cilium_version         = var.cilium_version
+  kubeconfig_path        = local_sensitive_file.kubeconfig.filename
+  k8s_service_host       = var.k8s_service_host
   k8s_service_port       = var.kube_prism_port
   lb_ipam_range          = var.load_balancer_ip_range
   enable_hubble_ui       = var.enable_hubble_ui

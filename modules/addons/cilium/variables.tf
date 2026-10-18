@@ -4,6 +4,23 @@ variable "cilium_version" {
   default     = "1.19.6"
 }
 
+variable "kubeconfig_path" {
+  description = "Path to the cluster kubeconfig, used to poll for the Cilium CRDs cilium_lb_ipam depends on"
+  type        = string
+}
+
+variable "crd_wait_timeout" {
+  description = "Seconds to poll for the Cilium CRDs before giving up"
+  type        = number
+  default     = 60
+}
+
+variable "crd_wait_interval" {
+  description = "Seconds between polls for the Cilium CRDs"
+  type        = number
+  default     = 2
+}
+
 variable "k8s_service_host" {
   description = "Address Cilium uses to reach the Kubernetes API. localhost targets KubePrism on the node."
   type        = string

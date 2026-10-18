@@ -74,6 +74,12 @@ variable "kube_prism_port" {
   default     = 7445
 }
 
+variable "k8s_service_host" {
+  description = "Host name for Cilium"
+  type        = string
+  default     = "localhost"
+}
+
 variable "enable_hubble_ui" {
   description = "Install Hubble Relay + Hubble UI behind Cilium, giving a web dashboard of live CNI traffic (service map, policy verdicts, DNS, L7 flows). Touches no machine configuration and needs no reboot, so it defaults on. Ignored when cni != \"cilium\"."
   type        = bool

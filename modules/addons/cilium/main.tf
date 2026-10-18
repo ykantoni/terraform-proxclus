@@ -88,7 +88,11 @@ resource "helm_release" "cilium" {
   chart      = "cilium"
   version    = var.cilium_version
 
-  wait    = true
+  # Not wait=true: hubble.ui's Service defaults to LoadBalancer, and Helm's
+  # wait blocks until that gets an external IP. That IP can only come from
+  # cilium_lb_ipam below, which itself depends on this release - a deadlock
+  # that would otherwise run until helm_timeout on every fresh install.
+  wait    = false
   timeout = var.helm_timeout
 
   # Later entries win, so callers can override any of the defaults above.
@@ -98,11 +102,36 @@ resource "helm_release" "cilium" {
   ]
 }
 
+# helm_release.cilium doesn't wait (see above), so the operator may not have
+# registered these CRDs with the API server yet. Poll for them rather than
+# depending on helm_release.cilium directly, or installing the chart below
+# can race the operator and fail with "no matches for kind ... ensure CRDs
+# are installed first".
+resource "terraform_data" "wait_for_lb_ipam_crds" {
+  depends_on = [
+    helm_release.cilium
+  ]
+
+  provisioner "local-exec" {
+    command = <<-EOT
+      set -eu
+      end=$(( $(date +%s) + ${var.crd_wait_timeout} ))
+      until kubectl --kubeconfig '${var.kubeconfig_path}' get crd ciliumloadbalancerippools.cilium.io ciliuml2announcementpolicies.cilium.io >/dev/null 2>&1; do
+        if [ "$(date +%s)" -ge "$end" ]; then
+          echo "Cilium CRDs did not appear within ${var.crd_wait_timeout}s" >&2
+          exit 1
+        fi
+        sleep ${var.crd_wait_interval}
+      done
+    EOT
+  }
+}
+
 # Ships as a chart rather than as plain manifests because the CRDs it depends on
 # are registered by the Cilium operator, and so do not exist at plan time.
 resource "helm_release" "cilium_lb_ipam" {
   depends_on = [
-    helm_release.cilium
+    terraform_data.wait_for_lb_ipam_crds
   ]
 
   name      = "cilium-lb-ipam"
