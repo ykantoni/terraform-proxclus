@@ -10,8 +10,9 @@ applied Terraform stacks, each its own repo included here as a git submodule.
 - `terraform-proxclus-k8s-infra/` — Talos bootstrap, Cilium, Longhorn,
   metrics-server, Prometheus, GPU Operator; reads vm-infra's outputs through
   `terraform_remote_state`
-- `terraform-proxclus-k8s-apps/` — applications (ollama, postgres), each an
-  independent Terraform root that only needs a kubeconfig
+- `terraform-proxclus-k8s-apps/` — applications (ollama, open-webui,
+  postgres), as ArgoCD `Application`s; k8s-infra's ArgoCD syncs them from
+  GitHub, no Terraform involved
 - `troubleshooting-agents/` — LangGraph troubleshooting agents (Talos,
   Ollama, NVIDIA GPU, Proxmox host) with a small React GUI, independent of
   Terraform entirely; see `troubleshooting-agents/README.md`
@@ -20,7 +21,7 @@ applied Terraform stacks, each its own repo included here as a git submodule.
 | --------- | -------------------------------------------- |
 | vm-infra  | `vm-infra.tfstate`                           |
 | k8s-infra | `k8s-infra.tfstate`                          |
-| k8s-apps  | `<app>.tfstate`, one per app                 |
+| k8s-apps  | none; ArgoCD reconciles from Git             |
 
 ## Usage
 
@@ -31,6 +32,6 @@ just apply      # vm-infra, then k8s-infra
 just generate   # writes ~/talosconfig and ~/.kube/config
 ```
 
-`just destroy` runs in reverse: k8s-infra, then vm-infra. Apps are applied
-separately from their own directories under `terraform-proxclus-k8s-apps/`;
-see its README.
+`just destroy` runs in reverse: k8s-infra, then vm-infra. Apps deploy
+themselves: k8s-infra's ArgoCD watches `terraform-proxclus-k8s-apps` on
+GitHub, so push to its `main` to change them; see its README.
