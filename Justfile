@@ -30,3 +30,6 @@ t-destroy:
 
 generate:
     just -f {{k8s}}/Justfile generate
+
+endpoints:
+    just -f {{k8s}}/Justfile endpoints
