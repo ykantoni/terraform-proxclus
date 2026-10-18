@@ -1,0 +1,9 @@
+[submodule "terraform-proxclus-vm-infra"]
+	path = terraform-proxclus-vm-infra
+	url = git@github.com:ykantoni/terraform-proxclus-vm-infra.git
+[submodule "terraform-proxclus-k8s-infra"]
+	path = terraform-proxclus-k8s-infra
+	url = git@github.com:ykantoni/terraform-proxclus-k8s-infra.git
+[submodule "terraform-proxclus-k8s-apps"]
+	path = terraform-proxclus-k8s-apps
+	url = git@github.com:ykantoni/terraform-proxclus-k8s-apps.git
