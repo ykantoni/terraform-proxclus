@@ -1,52 +1,32 @@
-# Task runner for this cluster. Run `just --list` to see all recipes.
-#
-# Unlike Make, a recipe with no `#!shebang` runs as one shell script — every
-# line shares state (cd, variables) — so none of these need Make's `.ONESHELL:`
-# or a bash -c wrapper to string commands together.
+# Orchestrates the three stacks (git submodules). Run `just --list` to see all
+# recipes; each submodule's own Justfile has the per-stack ones.
+
+vm := "terraform-proxclus-vm-infra"
+k8s := "terraform-proxclus-k8s-infra"
+
+# VMs first, then the cluster that runs on them.
+apply:
+    just -f {{vm}}/Justfile apply
+    just -f {{k8s}}/Justfile apply
+
+# Reverse order: the cluster, then the VMs under it.
+destroy:
+    just -f {{k8s}}/Justfile destroy
+    just -f {{vm}}/Justfile destroy
 
 plan:
-    terraform plan
+    just -f {{vm}}/Justfile plan
+    just -f {{k8s}}/Justfile plan
 
-# Apply the Terraform configuration.
-apply:
-    terraform apply -auto-approve
-
-# Destroy everything Terraform manages: the cluster and its VMs.
-# The patch only runs if the apiserver is reachable: if the cluster's
-# already gone (e.g. this is a re-run after a prior destroy succeeded),
-# there's nothing left for Longhorn's setting to guard anyway.
-destroy:
-    if kubectl cluster-info --request-timeout=5s >/dev/null 2>&1; then \
-      kubectl -n longhorn-system patch settings.longhorn.io deleting-confirmation-flag \
-        --type=merge -p '{"value":"true"}'; \
-    fi
-    terraform destroy -auto-approve
-
-# Format all Terraform files in place.
 fmt:
-    terraform fmt -recursive
+    just -f {{vm}}/Justfile fmt
+    just -f {{k8s}}/Justfile fmt
 
-# Build both Proxmox VM templates: the plain one (vm_id 9000) common nodes
-# clone from, and the NVIDIA one (vm_id 9001) GPU-tagged nodes clone from.
 t-create:
-    /usr/bin/bash -c "pushd vm-templates && sudo ./qemu-iscsi-2c.sh && sudo ./nvidia-qemu-iscsi-2c.sh && popd"
+    just -f {{vm}}/Justfile t-create
 
-# Destroy the Postgres cluster.
-pg-destroy:
-    kubectl delete -f apps/postgres/postgres-primary-standby.yaml --ignore-not-found
-
-# Create the Postgres cluster.
-pg-create:
-    kubectl apply -f apps/postgres/postgres-primary-standby.yaml
-
-# Destroy both templates.
 t-destroy:
-    sudo /usr/sbin/qm destroy 9000
-    sudo /usr/sbin/qm destroy 9001
+    just -f {{vm}}/Justfile t-destroy
 
-# Write talosconfig and kubeconfig from Terraform outputs.
 generate:
-    terraform output -raw talosconfig > "$HOME/talosconfig"
-    mkdir -p "$HOME/.kube"
-    terraform output -raw kubeconfig > "$HOME/.kube/config"
-    chmod 600 "$HOME/talosconfig" "$HOME/.kube/config"
+    just -f {{k8s}}/Justfile generate

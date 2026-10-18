@@ -4,3 +4,5 @@
 kubeconfig
 *.log
 
+*.tfstate
+*.tfstate.*
