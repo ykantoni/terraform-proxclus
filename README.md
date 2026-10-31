@@ -27,10 +27,18 @@ applied Terraform stacks, each its own repo included here as a git submodule.
 
 ```bash
 git clone --recurse-submodules git@github.com:ykantoni/terraform-proxclus.git
+just init       # install providers
 just t-create   # build Proxmox templates 9000/9001 (once)
 just apply      # vm-infra, then k8s-infra
 just generate   # writes ~/talosconfig and ~/.kube/config
 ```
+
+Recipes run [OpenTofu](https://opentofu.org/) by default. To use Terraform,
+set `TF=terraform` or pass `just tf=terraform <recipe>`. After changing tools,
+run `just switch` once (with the new tool selected): it re-initializes both
+stacks and, going to Terraform, rewrites the provider addresses tofu recorded
+in state. Skipping that makes Terraform install those providers unpinned,
+ignoring `versions.tf`. Docs that say `terraform apply` mean either tool.
 
 `just destroy` runs in reverse: k8s-infra, then vm-infra. Apps deploy
 themselves: k8s-infra's ArgoCD watches `terraform-proxclus-k8s-apps` on
